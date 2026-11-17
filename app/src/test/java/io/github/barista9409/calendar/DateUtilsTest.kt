@@ -15,14 +15,8 @@ class DateUtilsTest {
         assertEquals(DayOfWeek.SUNDAY, start.dayOfWeek)
     }
 
-    @Test fun dayIndexRoundTrip() {
-        val d = LocalDate.of(2027, 2, 13)
-        assertEquals(d, DateUtils.dayOf(DateUtils.dayIndex(d)))
-    }
-
     @Test fun indexesCoverFarFuture() {
         assert(DateUtils.weekIndex(LocalDate.of(2300, 1, 1)) < DateUtils.WEEK_COUNT)
-        assert(DateUtils.dayIndex(LocalDate.of(2300, 1, 1)) < DateUtils.DAY_COUNT)
     }
 
     @Test fun defaultStartIsNextHourToday() {

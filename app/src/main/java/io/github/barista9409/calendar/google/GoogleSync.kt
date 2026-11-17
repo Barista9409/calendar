@@ -27,15 +27,6 @@ class GoogleSync(
 
     fun unlink(account: String) = prefs.setLinked(account, false)
 
-    /** 端末側の同期を急いで実行するよう OS に依頼 */
-    fun requestDeviceSync(account: String) {
-        val extras = Bundle().apply {
-            putBoolean(ContentResolver.SYNC_EXTRAS_MANUAL, true)
-            putBoolean(ContentResolver.SYNC_EXTRAS_EXPEDITED, true)
-        }
-        runCatching { ContentResolver.requestSync(Account(account, "com.google"), CalendarContract.AUTHORITY, extras) }
-    }
-
     companion object {
         /** Google カレンダー（ウェブ）の、そのカレンダーの設定画面（名前・色・共有・削除） */
         fun calendarSettingsUrl(c: CalendarInfo): String {

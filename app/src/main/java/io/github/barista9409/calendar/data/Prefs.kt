@@ -26,40 +26,6 @@ class Prefs(context: Context) {
         _linked.value = next
     }
 
-    /**
-     * Google から取得したカレンダーの表示名・色。
-     * 表示名と色は「アカウントごと」の設定なので、キーは「アカウント|カレンダー ID」。
-     * （同じ共有カレンダーを複数のアカウントで登録していると、ID だけでは上書きし合って名前と色が入れ替わる）
-     */
-    data class ApiCalendar(val name: String, val color: Int?, val selected: Boolean)
-
-    private val _api = MutableStateFlow(readApi())
-    val apiCalendars: StateFlow<Map<String, ApiCalendar>> = _api.asStateFlow()
-
-    private fun readApi(): Map<String, ApiCalendar> = runCatching {
-        val o = org.json.JSONObject(sp.getString(KEY_API, "{}")!!)
-        o.keys().asSequence().filter { it.contains('|') }.associateWith { k ->
-            val v = o.getJSONObject(k)
-            ApiCalendar(v.getString("n"), if (v.has("c")) v.getInt("c") else null, v.optBoolean("s", true))
-        }
-    }.getOrDefault(emptyMap())
-
-    fun putApiCalendars(entries: Map<String, ApiCalendar>) {
-        val next = _api.value + entries
-        val o = org.json.JSONObject()
-        next.forEach { (k, v) ->
-            o.put(k, org.json.JSONObject().put("n", v.name).put("s", v.selected).also { j -> v.color?.let { j.put("c", it) } })
-        }
-        sp.edit().putString(KEY_API, o.toString()).apply()
-        _api.value = next
-    }
-
-    fun removeApiCalendar(account: String, id: String) = putApiCalendarsReplace(_api.value - apiKey(account, id))
-
-    private fun putApiCalendarsReplace(map: Map<String, ApiCalendar>) {
-        _api.value = emptyMap(); putApiCalendars(map)
-    }
-
     private fun readHidden(): Set<Long> =
         sp.getStringSet(KEY_HIDDEN, emptySet()).orEmpty().mapNotNull { it.toLongOrNull() }.toSet()
 
@@ -101,11 +67,6 @@ class Prefs(context: Context) {
     var widgetOpacity: Int
         get() = sp.getInt("widget_opacity", 100)
         set(v) = sp.edit().putInt("widget_opacity", v).apply()
-
-    /** 添付ファイルの端末内保存先（SAF のフォルダ URI。null = アプリ専用フォルダ） */
-    var attachmentTreeUri: String?
-        get() = sp.getString("attachment_tree", null)
-        set(v) = sp.edit().putString("attachment_tree", v).apply()
 
     private val _hiddenAccounts = MutableStateFlow(sp.getStringSet("hidden_accounts", emptySet()).orEmpty().toSet())
     /** このアプリで使わない（非表示にした）アカウント */
@@ -241,8 +202,6 @@ class Prefs(context: Context) {
          */
         fun normalizeColor(v: Int): Int = if (v == 0 || (v ushr 24) != 0) v else v or (0xFF shl 24)
 
-        fun apiKey(account: String, calendarId: String) = "$account|$calendarId"
-        private const val KEY_API = "api_calendars"
         private const val KEY_ACCOUNT = "account_filter"
         private const val KEY_VIEW = "view_mode"
         private const val KEY_LAST_CAL = "last_calendar"

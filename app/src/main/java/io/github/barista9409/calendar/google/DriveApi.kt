@@ -78,32 +78,10 @@ class DriveApi(private val auth: GoogleAuth) {
 
     data class Folder(val id: String, val name: String)
 
-    /** フォルダ内のサブフォルダ一覧（名前順） */
-    suspend fun listFolders(account: String, parentId: String): List<Folder> {
-        val q = "'$parentId' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false"
-        val res = json(account, "GET", "$base/files?q=${enc(q)}&fields=files(id,name)&orderBy=name&pageSize=200&spaces=drive")
-        val arr = res?.optJSONArray("files") ?: JSONArray()
-        return (0 until arr.length()).map { arr.getJSONObject(it).let { o -> Folder(o.getString("id"), o.getString("name")) } }
-    }
-
-    /** フォルダの中身（ファイルとフォルダ）の ID */
-    suspend fun children(account: String, folderId: String): List<String> {
-        val q = "'$folderId' in parents and trashed=false"
-        val res = json(account, "GET", "$base/files?q=${enc(q)}&fields=files(id)&pageSize=1000&spaces=drive")
-        val arr = res?.optJSONArray("files") ?: JSONArray()
-        return (0 until arr.length()).map { arr.getJSONObject(it).getString("id") }
-    }
-
     /** 名前と親フォルダ（"root" を渡すとマイドライブ自体の ID が得られる） */
     suspend fun info(account: String, id: String): Pair<Folder, String?> {
         val o = requireNotNull(json(account, "GET", "$base/files/${enc(id)}?fields=id,name,parents"))
         return Folder(o.getString("id"), o.getString("name")) to o.optJSONArray("parents")?.optString(0)?.ifBlank { null }
-    }
-
-    /** ファイル・フォルダを別のフォルダへ移動 */
-    suspend fun move(account: String, fileId: String, toFolder: String, fromFolder: String) {
-        json(account, "PATCH", "$base/files/${enc(fileId)}?addParents=${enc(toFolder)}&removeParents=${enc(fromFolder)}&fields=id",
-            JSONObject())
     }
 
     /** appProperties の key=value で、このアプリが作ったフォルダを探す（parent を指定するとその中だけ） */
@@ -131,12 +109,6 @@ class DriveApi(private val auth: GoogleAuth) {
         }
     }
 
-    /** 閲覧権限を付与（通知メールは送らない） */
-    suspend fun addReader(account: String, fileId: String, type: String, email: String) {
-        json(account, "POST", "$base/files/${enc(fileId)}/permissions?sendNotificationEmail=false",
-            JSONObject().put("type", type).put("role", "reader").put("emailAddress", email))
-    }
-
     /** 「リンクを知っている人は誰でも閲覧可」にする */
     suspend fun shareAnyoneWithLink(account: String, fileId: String) {
         json(account, "POST", "$base/files/${enc(fileId)}/permissions?fields=id",
@@ -161,10 +133,6 @@ class DriveApi(private val auth: GoogleAuth) {
             c.inputStream.use { i -> tmp.outputStream().use { o -> i.copyTo(o) } }
             tmp.renameTo(dest)
         } finally { c.disconnect() }
-    }
-
-    suspend fun deletePermission(account: String, fileId: String, permissionId: String) {
-        json(account, "DELETE", "$base/files/${enc(fileId)}/permissions/${enc(permissionId)}")
     }
 
     /** 再開可能アップロード（1 回の PUT で送信） */
@@ -231,6 +199,4 @@ class DriveApi(private val auth: GoogleAuth) {
         json(account, "PATCH", "$base/files/${enc(fileId)}?fields=id", JSONObject().put("trashed", true))
     }
 
-    suspend fun isOwnedByMe(account: String, fileId: String): Boolean =
-        json(account, "GET", "$base/files/${enc(fileId)}?fields=ownedByMe")?.optBoolean("ownedByMe") == true
 }

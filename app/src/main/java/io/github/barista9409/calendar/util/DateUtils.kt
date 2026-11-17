@@ -16,13 +16,10 @@ object DateUtils {
     /** 週インデックスの基準（1970-01-04 は日曜） */
     private val BASE: LocalDate = LocalDate.of(1970, 1, 4)
     const val WEEK_COUNT = 52 * 400
-    const val DAY_COUNT = 365 * 400
 
     fun startOfWeek(date: LocalDate): LocalDate = date.with(TemporalAdjusters.previousOrSame(firstDayOfWeek))
     fun weekIndex(date: LocalDate): Int = ChronoUnit.WEEKS.between(BASE, startOfWeek(date)).toInt()
     fun weekStartOf(index: Int): LocalDate = BASE.plusWeeks(index.toLong())
-    fun dayIndex(date: LocalDate): Int = ChronoUnit.DAYS.between(BASE, date).toInt()
-    fun dayOf(index: Int): LocalDate = BASE.plusDays(index.toLong())
 
     private val JP = Locale.JAPAN
     private val weekdayFmt = DateTimeFormatter.ofPattern("E", JP)

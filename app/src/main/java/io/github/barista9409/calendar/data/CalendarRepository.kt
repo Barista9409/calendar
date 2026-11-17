@@ -78,7 +78,6 @@ class CalendarRepository(private val context: Context, private val prefs: Prefs,
             Calendars.CALENDAR_COLOR, Calendars.CALENDAR_ACCESS_LEVEL, Calendars.IS_PRIMARY, Calendars.OWNER_ACCOUNT,
             Calendars.NAME,
         )
-        val api = prefs.apiCalendars.value
         val list = mutableListOf<CalendarInfo>()
         cr.query(Calendars.CONTENT_URI, projection, "${Calendars.SYNC_EVENTS}=1", null, null)?.use { c ->
             while (c.moveToNext()) {
@@ -88,14 +87,12 @@ class CalendarRepository(private val context: Context, private val prefs: Prefs,
                 val primaryCol = if (c.isNull(6)) null else c.getInt(6) == 1
                 val type = c.getString(3).orEmpty()
                 val apiId = if (type == "com.google") (owner ?: c.getString(8)) else null
-                // 以前は Google カレンダーの API から名前・色を取っていた。今は端末のカレンダー（Google と同期済み）を使う
-                val o: Prefs.ApiCalendar? = null
                 list += CalendarInfo(
                     id = c.getLong(0),
-                    name = o?.name ?: c.getString(1) ?: "(名前なし)",
+                    name = c.getString(1) ?: "(名前なし)",
                     accountName = account,
                     accountType = type,
-                    color = o?.color ?: ColorUtils.toModern(c.getInt(4)),
+                    color = ColorUtils.toModern(c.getInt(4)),
                     accessLevel = c.getInt(5),
                     isPrimary = primaryCol ?: (owner != null && owner == account),
                     ownerAccount = owner,

@@ -149,9 +149,6 @@ class CalendarsViewModel(app: Application) : AndroidViewModel(app) {
     /** アカウントを選んだ（またはやめた）後 */
     fun chosen() { _fixStep.value = null; nextFixStep() }
 
-    /** 選んでもらう画面をやめたとき */
-    fun cancelFix() { _fixStep.value = null; chooseQueue.clear() }
-
     private fun nextFixStep() {
         val next = chooseQueue.removeFirstOrNull()
         if (next != null) { _fixStep.value = FixStep.Choose(next); return }

@@ -69,9 +69,6 @@ data class EventInstance(
         }
     }
 
-    fun occursOn(date: LocalDate, zone: ZoneId): Boolean =
-        !date.isBefore(startDate(zone)) && !date.isAfter(lastDate(zone))
-
     fun startLocal(zone: ZoneId): LocalDateTime = Instant.ofEpochMilli(begin).atZone(zone).toLocalDateTime()
     fun endLocal(zone: ZoneId): LocalDateTime = Instant.ofEpochMilli(end).atZone(zone).toLocalDateTime()
 }
@@ -111,14 +108,3 @@ data class EventColor(val key: String, val color: Int)
 /** 入力画面で選んだ添付ファイル（保存したあとにアップロードする） */
 data class PendingFile(val uri: String, val name: String)
 
-/**
- * 予定の詳細に出す「作成者」。自分（カレンダーのアカウント）やカレンダー自身のときは出さない（Google と同じ）。
- * 共有カレンダーの予定は作成者がカレンダーの ID（…@group.calendar.google.com）になるので、これも出さない。
- */
-fun creatorLabel(organizer: String?, accountName: String?, calendarName: String?, ownerAccount: String?): String? {
-    val o = organizer?.trim().orEmpty()
-    if (o.isEmpty()) return null
-    if (o.equals(accountName, true) || o.equals(calendarName, true) || o.equals(ownerAccount, true)) return null
-    if (o.endsWith("calendar.google.com", ignoreCase = true)) return null
-    return o
-}

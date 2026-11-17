@@ -20,9 +20,8 @@ class SyncStatusTest {
         assertEquals(SyncStatus.Fix.MASTER, st(master = false).fix)
         assertEquals(SyncStatus.Fix.ACCOUNT, st(acc = false).fix)
         assertEquals(SyncStatus.Fix.ACCOUNT, st(syncable = 0).fix)
-        assertTrue(st(acc = false).isError && st(acc = false).fixLabel.isNotEmpty())
+        assertTrue(st(acc = false).isError)
         assertTrue(st(unsynced = 2).message.contains("2 個"))
-        assertTrue(st(master = false).hasProblem && st(unsynced = 1).hasProblem)
     }
 
     @Test fun invisibleAccountIsNotReportedAsOff() {
@@ -30,9 +29,7 @@ class SyncStatusTest {
         val s = st(acc = false, syncable = 0, access = false)
         assertEquals(SyncStatus.Fix.ACCESS, s.fix)
         assertFalse(s.isError)
-        assertFalse(s.hasProblem)
         assertTrue(s.message.contains("見えません"))
-        assertEquals("見られるようにする", s.fixLabel)
         assertTrue(s.details.any { it.second.contains("見えないため不明") })
     }
 
@@ -48,23 +45,11 @@ class SyncStatusTest {
         assertFalse(io.github.barista9409.calendar.data.SyncProgress.isDone(500, false, true, true, true, 0))
     }
 
-    @Test fun creatorHidesCalendarIds() {
-        val f = { o: String?, a: String?, n: String?, w: String? -> io.github.barista9409.calendar.model.creatorLabel(o, a, n, w) }
-        // 共有カレンダーの ID（画面で「作成者：8c6c…@group.calendar.google.com」と出ていた不具合）
-        assertEquals(null, f("abc123@group.calendar.google.com", "me@example.com", "プライベート", null))
-        assertEquals(null, f("ja.japanese#holiday@group.v.calendar.google.com", "a@gmail.com", "日本の祝日", null))
-        assertEquals(null, f("a@gmail.com", "a@gmail.com", "a@gmail.com", null))
-        assertEquals(null, f("cal@example.com", "a@gmail.com", "x", "cal@example.com"))
-        assertEquals(null, f("", "a@gmail.com", "x", null))
-        assertEquals("b@gmail.com", f("b@gmail.com", "a@gmail.com", "x", null))
-    }
-
     @Test fun normalStates() {
         assertTrue(st(active = true).message.contains("同期しています"))
         assertTrue(st(pending = true).message.contains("待って"))
         assertTrue(st(dirty = 3).message.contains("送っていない変更が 3 件"))
         assertTrue(st().message.contains("同期はオン"))
-        assertFalse(st().hasProblem)
         assertEquals(SyncStatus.Fix.NONE, st().fix)
     }
 

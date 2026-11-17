@@ -179,9 +179,6 @@ class CalendarViewModel(app: Application) : AndroidViewModel(app) {
         refresh()
         @OptIn(FlowPreview::class)
         viewModelScope.launch { repo.changes().debounce(400).collect { refresh() } }
-        // Google から取得した名前・色が変わったら再表示
-        @OptIn(FlowPreview::class)
-        viewModelScope.launch { prefs.apiCalendars.debounce(200).collect { refresh() } }
         @OptIn(FlowPreview::class)
         viewModelScope.launch { prefs.hiddenAccounts.debounce(200).collect { refresh(); WidgetUpdater.updateAllAsync(getApplication()) } }
     }

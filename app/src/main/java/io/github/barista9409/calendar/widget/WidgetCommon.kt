@@ -57,7 +57,6 @@ import java.time.ZoneId
 import androidx.glance.color.ColorProvider as DayNight
 import androidx.glance.unit.ColorProvider as Fixed
 
-val OFFSET_KEY = intPreferencesKey("offset")
 val TICK_KEY = longPreferencesKey("tick")
 
 /** 予定の色の上に載せる文字色（明るい色には濃い文字） */
@@ -109,35 +108,6 @@ fun widgetTheme(context: Context): WTheme {
             sunday = Fixed(pal.sunday), saturday = Fixed(pal.saturday), chipBg = Fixed(pal.chipBg), nowLine = Fixed(Color(0xFFD93025)),
         )
     }
-}
-
-/**
- * ウィジェットの実際の高さ。ランチャーによっては LocalSize が小さめに報告されるため、
- * 縦向きでは OPTION_APPWIDGET_MAX_HEIGHT（横向きでは MIN_HEIGHT）を優先する。
- */
-@Composable
-fun widgetHeight(): Dp {
-    val ctx = LocalContext.current
-    val fallback = LocalSize.current.height
-    val appWidgetId = runCatching { GlanceAppWidgetManager(ctx).getAppWidgetId(LocalGlanceId.current) }.getOrNull()
-        ?: return fallback
-    val opts = AppWidgetManager.getInstance(ctx).getAppWidgetOptions(appWidgetId)
-    val portrait = ctx.resources.configuration.orientation != Configuration.ORIENTATION_LANDSCAPE
-    val h = opts.getInt(if (portrait) AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT else AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT)
-    return if (h > 0 && h.dp > fallback) h.dp else fallback
-}
-
-/** ウィジェットの実際の幅（縦向きは OPTION_APPWIDGET_MIN_WIDTH が実寸） */
-@Composable
-fun widgetWidth(): Dp {
-    val ctx = LocalContext.current
-    val fallback = LocalSize.current.width
-    val appWidgetId = runCatching { GlanceAppWidgetManager(ctx).getAppWidgetId(LocalGlanceId.current) }.getOrNull()
-        ?: return fallback
-    val opts = AppWidgetManager.getInstance(ctx).getAppWidgetOptions(appWidgetId)
-    val portrait = ctx.resources.configuration.orientation != Configuration.ORIENTATION_LANDSCAPE
-    val w = opts.getInt(if (portrait) AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH else AppWidgetManager.OPTION_APPWIDGET_MAX_WIDTH)
-    return if (w > 0) w.dp else fallback
 }
 
 object WidgetData {
@@ -198,39 +168,13 @@ fun widgetColors(context: Context): WColors {
     )
 }
 
-/** ビットマップ描画用の生の色（設定とダークモードを反映） */
-data class RawColors(val text: Int, val sub: Int, val line: Int, val primary: Int, val todayBg: Int, val now: Int)
-
-fun widgetRawColors(context: Context): RawColors {
-    val p = context.container.prefs
-    val night = (context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
-    val dark = if (p.widgetColor == 0) night else ColorUtils.onColor(p.widgetColor) == Color.White
-    val pal = if (dark) DARK else LIGHT
-    fun Color.toArgb(): Int = android.graphics.Color.argb((alpha * 255).toInt(), (red * 255).toInt(), (green * 255).toInt(), (blue * 255).toInt())
-    return RawColors(pal.text.toArgb(), pal.sub.toArgb(), pal.line.toArgb(), pal.primary.toArgb(), pal.todayBg.toArgb(), 0xFFD93025.toInt())
-}
-
 fun newEventAction(context: Context) = actionStartActivity(
     Intent(context, MainActivity::class.java).putExtra(MainActivity.EXTRA_NEW_EVENT, true)
         .setData(android.net.Uri.parse("calendar://new"))
         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
 )
 
-val DeltaKey = ActionParameters.Key<Int>("delta")
-val KindKey = ActionParameters.Key<String>("kind")
-
-fun navAction(kind: String, delta: Int) = actionRunCallback<NavAction>(actionParametersOf(KindKey to kind, DeltaKey to delta))
-
-class NavAction : ActionCallback {
-    override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
-        val delta = parameters[DeltaKey] ?: 0
-        updateAppWidgetState(context, glanceId) { p -> p[OFFSET_KEY] = if (delta == 0) 0 else (p[OFFSET_KEY] ?: 0) + delta }
-        WidgetUpdater.widgetFor(parameters[KindKey] ?: "month").update(context, glanceId)
-    }
-}
-
 object WidgetUpdater {
-    fun widgetFor(@Suppress("UNUSED_PARAMETER") kind: String): GlanceAppWidget = DayWidget()
 
     suspend fun updateAll(context: Context) {
         val mgr = GlanceAppWidgetManager(context)
@@ -276,27 +220,6 @@ class CalendarChangedReceiver : BroadcastReceiver() {
     }
 }
 
-/** ヘッダー：タイトルと［今日］‹ › ＋（アイコンは押しやすい 40dp の丸ボタン） */
-@Composable
-fun WidgetHeader(context: Context, t: WTheme, title: String, kind: String, nav: Boolean = true) {
-    // タイトル ｜ 今日・前・次（中央寄せ、間隔をあける） ｜ 追加（右端）
-    Row(GlanceModifier.fillMaxWidth().height(46.dp).padding(start = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(title, GlanceModifier.defaultWeight(), style = TextStyle(color = t.text, fontSize = 17.sp, fontWeight = FontWeight.Bold), maxLines = 1)
-        if (nav) {
-            IconButton(t, io.github.barista9409.calendar.R.drawable.ic_w_today, "今日", navAction(kind, 0))
-            Spacer(GlanceModifier.width(10.dp))
-            IconButton(t, io.github.barista9409.calendar.R.drawable.ic_w_prev, "前へ", navAction(kind, -1))
-            Spacer(GlanceModifier.width(10.dp))
-            IconButton(t, io.github.barista9409.calendar.R.drawable.ic_w_next, "次へ", navAction(kind, 1))
-            Box(GlanceModifier.defaultWeight(), contentAlignment = Alignment.CenterEnd) {
-                IconButton(t, io.github.barista9409.calendar.R.drawable.ic_w_add, "予定を追加", newEventAction(context), filled = true)
-            }
-        } else {
-            IconButton(t, io.github.barista9409.calendar.R.drawable.ic_w_add, "予定を追加", newEventAction(context), filled = true)
-        }
-    }
-}
-
 /** 見出し（真ん中）：「本日：…」と右端の＋。日ウィジェット用 */
 @Composable
 fun CenteredHeader(context: Context, t: WTheme, title: String) {
@@ -324,6 +247,3 @@ private fun IconButton(t: WTheme, icon: Int, label: String, action: Action, fill
     }
 }
 
-/** 区切り線 */
-@Composable
-fun HLine(t: WTheme) { Box(GlanceModifier.fillMaxWidth().height(1.dp).background(t.line)) {} }

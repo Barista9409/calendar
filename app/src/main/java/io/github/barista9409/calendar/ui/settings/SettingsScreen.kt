@@ -82,7 +82,7 @@ import io.github.barista9409.calendar.data.Prefs
 /** 設定の各画面 */
 private enum class Page(val title: String) {
     TOP("設定"), APPEARANCE("色とテーマ"), DISPLAY("カレンダーの表示"), NOTIFY("通知"),
-    ATTACH("添付ファイル"), WIDGET("ウィジェットの見た目"), ACCOUNTS("アカウント"),
+    ATTACH("添付ファイル"), ACCOUNTS("アカウント"),
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -111,7 +111,6 @@ fun SettingsScreen(onBack: () -> Unit, onOpenUpdate: () -> Unit = {}) {
                 Page.DISPLAY -> DisplayPage()
                 Page.NOTIFY -> NotifyPage()
                 Page.ATTACH -> AttachPage(snackbar)
-                Page.WIDGET -> WidgetAppearance(appWidgetId = null)
                 Page.ACCOUNTS -> AccountsPage()
             }
             Spacer(Modifier.height(24.dp))

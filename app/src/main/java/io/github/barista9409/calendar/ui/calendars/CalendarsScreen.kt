@@ -80,13 +80,6 @@ import io.github.barista9409.calendar.google.GoogleSync
 import io.github.barista9409.calendar.model.CalendarInfo
 import io.github.barista9409.calendar.util.ColorUtils
 
-/** Google カレンダーの現在のパレット（24 色） */
-private val PALETTE = listOf(
-    0xD50000, 0xE67C73, 0xF4511E, 0xF6BF26, 0x33B679, 0x0B8043, 0x039BE5, 0x3F51B5,
-    0x7986CB, 0x8E24AA, 0x616161, 0x795548, 0xAD1457, 0xD81B60, 0xEF6C00, 0xF09300,
-    0xE4C441, 0xC0CA33, 0x7CB342, 0x009688, 0x4285F4, 0xB39DDB, 0x9E69AF, 0xA79B8E,
-).map { it or (0xFF shl 24) }
-
 /** カレンダーの管理：表示・非表示、Google 連携（添付ファイル用）、名前・色・共有は Google カレンダーの設定画面へ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

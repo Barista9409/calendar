@@ -29,9 +29,4 @@ class UpdateInfoTest {
         assertThrows(IllegalArgumentException::class.java) { UpdateInfo.parse(json) }
     }
 
-    @Test fun versionCodeFromTag() {
-        assertEquals(10203, UpdateInfo.versionCodeOf("v1.2.3"))
-        assertEquals(100, UpdateInfo.versionCodeOf("0.1.0"))
-        assertThrows(IllegalArgumentException::class.java) { UpdateInfo.versionCodeOf("1.2") }
-    }
 }

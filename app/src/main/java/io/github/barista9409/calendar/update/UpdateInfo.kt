@@ -33,11 +33,5 @@ data class UpdateInfo(
             )
         }
 
-        /** タグ v1.2.3 → 10203 */
-        fun versionCodeOf(versionName: String): Int {
-            val parts = versionName.removePrefix("v").substringBefore('-').split('.').map { it.toInt() }
-            require(parts.size == 3 && parts.all { it in 0..99 }) { "バージョン形式が不正です: $versionName" }
-            return parts[0] * 10000 + parts[1] * 100 + parts[2]
-        }
     }
 }

@@ -52,17 +52,6 @@ data class SyncStatus(
         else -> "同期はオンです（Google カレンダーと自動でそろいます）"
     }
 
-    /** 直すボタンの文字 */
-    val fixLabel: String get() = when (fix) {
-        Fix.MASTER -> "自動同期をオンにする"
-        Fix.ACCOUNT -> "自動同期をオンにする"
-        Fix.ACCESS -> "見られるようにする"
-        Fix.NONE -> ""
-    }
-
-    /** 予定が届かない原因になる問題があるか */
-    val hasProblem: Boolean get() = isError || unsynced > 0
-
     /** 赤い警告にするか（見えないだけのときは赤くしない） */
     val isError: Boolean get() = fix == Fix.MASTER || fix == Fix.ACCOUNT
 

@@ -1,0 +1,47 @@
+name: Verify RELEASES_REPO_TOKEN
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/verify-releases-token.yml
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check token access to calendar-releases (non-destructive)
+        env:
+          TOKEN: ${{ secrets.RELEASES_REPO_TOKEN }}
+          REPO: barista9409/calendar-releases
+        run: |
+          set -u
+          if [ -z "$TOKEN" ]; then
+            echo "::error::RELEASES_REPO_TOKEN is not set (or not available to this workflow)"; exit 1
+          fi
+          api() { curl -sS -o /tmp/body -w '%{http_code}' -H "Authorization: Bearer $TOKEN" \
+                  -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" "$@"; }
+          fail=0
+
+          code=$(api "https://api.github.com/repos/$REPO")
+          echo "Read repository: HTTP $code"
+          [ "$code" = 200 ] || fail=1
+          [ "$code" = 200 ] && echo "Visibility: $(jq -r .visibility /tmp/body)"
+
+          # Invalid body on purpose: 422 = authorized to write (validation failed), 403/404 = no permission
+          code=$(api -X POST "https://api.github.com/repos/$REPO/releases" -d '{"tag_name":""}')
+          echo "Create release permission probe: HTTP $code"
+          [ "$code" = 422 ] || fail=1
+
+          code=$(api -X PUT "https://api.github.com/repos/$REPO/contents/__probe__.json" -d '{"message":"probe"}')
+          echo "Write contents permission probe: HTTP $code"
+          [ "$code" = 422 ] || fail=1
+
+          code=$(api "https://api.github.com/rate_limit")
+          exp=$(curl -sSI -H "Authorization: Bearer $TOKEN" https://api.github.com/rate_limit | grep -i 'github-authentication-token-expiration' | cut -d' ' -f2- || true)
+          echo "Token expiration: ${exp:-'(no expiration header)'}"
+
+          if [ "$fail" = 0 ]; then echo "OK: token can read and write releases/contents of $REPO"; else echo "::error::Token is missing required permissions"; exit 1; fi

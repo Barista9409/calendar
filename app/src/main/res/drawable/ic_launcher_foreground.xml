@@ -1,0 +1,24 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <!-- 影 -->
+    <path android:fillColor="#26000000"
+        android:pathData="M39,35h34a8,8 0,0 1,8 8v30a8,8 0,0 1,-8 8h-34a8,8 0,0 1,-8 -8v-30a8,8 0,0 1,8 -8z" />
+    <!-- カレンダーのカード -->
+    <path android:fillColor="#FFFFFFFF"
+        android:pathData="M37,33h34a8,8 0,0 1,8 8v30a8,8 0,0 1,-8 8h-34a8,8 0,0 1,-8 -8v-30a8,8 0,0 1,8 -8z" />
+    <!-- 上の帯 -->
+    <path android:fillColor="#FFDCE4FF"
+        android:pathData="M37,33h34a8,8 0,0 1,8 8v4h-50v-4a8,8 0,0 1,8 -8z" />
+    <!-- リング -->
+    <path android:fillColor="#FF2A3FB8" android:pathData="M42,28.5h4a1.5,1.5 0,0 1,1.5 1.5v8a1.5,1.5 0,0 1,-1.5 1.5h-4a1.5,1.5 0,0 1,-1.5 -1.5v-8a1.5,1.5 0,0 1,1.5 -1.5z" />
+    <path android:fillColor="#FF2A3FB8" android:pathData="M62,28.5h4a1.5,1.5 0,0 1,1.5 1.5v8a1.5,1.5 0,0 1,-1.5 1.5h-4a1.5,1.5 0,0 1,-1.5 -1.5v-8a1.5,1.5 0,0 1,1.5 -1.5z" />
+    <!-- 日付のドット -->
+    <path android:fillColor="#FF4A6CF7" android:pathData="M42,55m-3.6,0a3.6,3.6 0,1 1,7.2 0a3.6,3.6 0,1 1,-7.2 0" />
+    <path android:fillColor="#FF4A6CF7" android:pathData="M54,55m-3.6,0a3.6,3.6 0,1 1,7.2 0a3.6,3.6 0,1 1,-7.2 0" />
+    <path android:fillColor="#FF4A6CF7" android:pathData="M66,55m-3.6,0a3.6,3.6 0,1 1,7.2 0a3.6,3.6 0,1 1,-7.2 0" />
+    <path android:fillColor="#FF4A6CF7" android:pathData="M42,67m-3.6,0a3.6,3.6 0,1 1,7.2 0a3.6,3.6 0,1 1,-7.2 0" />
+    <path android:fillColor="#FF4A6CF7" android:pathData="M54,67m-3.6,0a3.6,3.6 0,1 1,7.2 0a3.6,3.6 0,1 1,-7.2 0" />
+    <!-- 今日（アクセント） -->
+    <path android:fillColor="#FFFF8A3D" android:pathData="M66,67m-4.6,0a4.6,4.6 0,1 1,9.2 0a4.6,4.6 0,1 1,-9.2 0" />
+</vector>

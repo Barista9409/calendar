@@ -1,0 +1,59 @@
+# リリース前チェックリスト
+
+リリース（release.yml の実行）の前に、毎回すべて確認する。過去に指摘された不具合の再発防止用。
+「自動」は CI の単体テストで確認できるもの、「目視」はコードと画面を確認するもの。
+
+| # | 過去の不具合 | 確認方法 |
+|---|---|---|
+| 1 | 週・日表示を横スワイプすると 1970 年に飛ぶ | 目視：TimelineView のページ位置が相対（今日基準）であること |
+| 2 | 月ウィジェットが表示されない／更新後に壊れる | 目視：AppUpdatedReceiver（MY_PACKAGE_REPLACED）が manifest にあること。RemoteViews に使えない View（View, Space など）をレイアウトに使っていないこと |
+| 3 | 月ウィジェットで予定が二重・三重に表示される（行の使い回し） | 自動：MonthWidgetRenderTest.recycledRowIsClearedBeforeDrawing |
+| 4 | 予定が見えないのに「+2」だけ出る／入りきらない表示 | 自動：MonthLayoutTest, MonthWidgetRenderTest.overflowShowsDotsOnlyWhereHidden / noDotsWithoutHiddenEvents |
+| 5 | 複数日の予定が帯でつながらない | 自動：MonthWidgetRenderTest.multiDayEventIsOneChipSpanningDays |
+| 6 | 右端の列（土曜）が切れる・文字が引き伸ばされる | 目視：幅を dp で計算せず、weight（7 等分）で並べていること。ビットマップで文字を描いていないこと |
+| 7 | ウィジェットを広げても表示件数が増えない | 目視：MonthWidget.spec が OPTION_APPWIDGET_SIZES から高さを取り、文字サイズ設定から行数を計算していること |
+| 8 | 月ウィジェットの上下スクロールが短い | 目視：listWeeks が前後 12 か月 |
+| 9 | 月の変わり目が分からない | 自動：MonthWidgetRenderTest.firstOfMonthShowsMonth |
+| 10 | 予定詳細で日付が二重に出る | 自動：EventDateLineTest |
+| 11 | 添付画像のプレビューが小さい・出ない | 目視：AttachmentsSection で画像・PDF は大きなカードで表示 |
+| 12 | 詳細シートを閉じるボタンがない | 目視：SheetPanel の右上に × |
+| 13 | ウィジェット選択画面のプレビュー画像がない | 目視：res/xml/widget_*.xml に previewImage |
+| 14 | アプリの月表示：シートを開くと行が縮み、空きがあるのに「+N」 | 自動：MonthViewSizeTest。目視：MonthView の行の高さが表示領域ではなく最大の高さから決まること |
+| 15 | 同じ共有カレンダーを複数アカウントで登録していると、開くたびにカレンダー名と予定の色が入れ替わる | 自動：ApiCalendarPrefsTest。目視：Google 側の表示名・色はキー「アカウント|カレンダー ID」で保存・参照していること |
+| 16 | アプリの月表示とウィジェットで予定の色の付き方・並び方が違う | 自動：MonthWeekItemsTest。目視：アプリの MonthView とウィジェットがどちらも MonthLayout.weekItems / lanes / fit を使い、すべて塗りつぶしの帯で描いていること |
+| 17 | 色の設定：選んだ色が残らない（黒が「標準」扱いになる）・意味の分からない丸・色が多すぎる | 自動：SettingsColorsTest。目視：色は名前つき 8 色＋「ほかの色」、選択中は枠・チェック・太字。明るさは言葉で選ぶ。ウィジェットの設定はアプリの色と分かれている |
+| 18 | 月ウィジェットで 1 日の最大件数を指定できない | 自動：MonthLayoutTest.fixedMaxShowsUpToMaxAndDotsForTheRest / rowHeightGrowsWithMax。目視：ウィジェットの見た目に「自動・2〜6件」 |
+| 19 | マナーモードで通知に気づかない（バイブが無効だった）・通知の種類を選べない | 自動：ReminderStyleTest。目視：ReminderReceiver.ensureChannel で種類ごとのチャンネルを作り enableVibration していること、設定に「通知の種類」と「テスト通知を送る」 |
+| 20 | 日付・時刻の選択ダイアログが見にくい（暗い下地に暗い文字・下地が透ける） | 自動：PopupContrastTest（全背景色×明るさ×メインの色で、ダイアログの下地が不透明・文字との差 4.5 以上） |
+| 21 | バイブが鳴らないときがある・短い・止めるまで鳴らせない | 自動：ReminderStyleTest（サイレント時の判断・長さ・繰り返し）。目視：manifest に VIBRATE 権限、Buzz がアラーム扱いで直接振動、通知に［止める］・消す／開くで停止、最長5分 |
+| 22 | 通知の［止める］でバイブが止まらない・［止める］がないときがある | 自動：ReminderStyleTest.stopButtonIsAlwaysFirstWhenItBuzzes。目視：Buzz はアプリ全体で 1 つの Vibrator（applicationContext から取得し使い回す）で鳴らし・止めていること |
+| 23 | メニューの色を分けられない・おすすめテーマから選べない・共有ボタンがない | 自動：ThemePresetTest（8 種類が明るさに合い、すべて読みやすい／共有の文面にダウンロード先）。目視：ドロワーが MenuTheme、色とテーマに「おすすめのテーマ」「細かく調整する」「マイテーマ」、メニューと設定に「このアプリを共有」 |
+| 24 | 共有のダウンロード先が APK の直リンクでない | 自動：ThemePresetTest.shareTextHasDownloadLinkAndSteps。目視：release.yml が calendar.apk も Release に置き、--latest を付けていること |
+| 25 | ウィジェットで今どの月か分からない・祝日が赤くない | 自動：MonthWidgetRenderTest.firstOfMonthShowsMonth / holidayIsRed。目視：見出しタップで今月に戻る |
+| 26 | 設定が機種変更で引き継がれない・初回に通知が来ない | 目視：manifest の fullBackupContent / dataExtractionRules に calendar_prefs と month_widget、初回起動時に通知の受け取り先を聞く |
+| 27 | Google の審査・テストユーザー登録が必要（制限付き・機密の権限を使っていた） | 自動：AttachmentServiceTest（権限は drive.file だけ／説明への添付リンクの追加・削除・編集で消えない）。目視：CalendarApi を使っていない、カレンダー管理に「Google カレンダーで設定を開く」 |
+| 28 | 予定の入力画面で添付できない | 自動：AttachmentServiceTest.editingKeepsAttachments。目視：入力画面に「ファイルを添付」（複数選択・×で外せる・添付済みの表示）、保存後に uploadPending でアップロード |
+| 29 | 月ウィジェットの見出しと表示がずれる | 自動：SyncStatusTest.widgetTitleIsTodayNotTheScrolledMonth（見出しは今日の日付）。目視：［‹］［›］・見出しタップで goAsync してスクロールを待つ |
+| 30 | Google カレンダーにある予定が出ない・同期の状態が分からない | 自動：SyncStatusTest。目視：カレンダー管理に同期の状態・「スマホに同期していないカレンダー」と［同期する］、メニューに同期オフの警告、manifest に READ_SYNC_SETTINGS / READ_SYNC_STATS |
+| 31 | 月ウィジェットの見出し・ボタンが分かりにくい、スクロール中に何月か分からない | 自動：MonthWidgetRenderTest.railShowsMonthOfTheWeek / firstOfMonthShowsMonth、SyncStatusTest（「本日：…」）。目視：見出しは中央の「本日：…」（タップで今日へ）と右の＋だけ、左に月の列、曜日 13sp 太字、偶数月の塗り分け、日ウィジェットも「本日：…」中央 |
+| 32 | 同期オフの［設定を開く］でパスワードの画面に飛び、何をすればいいか分からない | 目視：［同期をオンにする］が ACCOUNT_SYNC_SETTINGS（account 付き）でそのアカウントの同期画面を開く。文言に「Google カレンダーをオン」 |
+| 33 | 実際は同期オンなのに「カレンダー同期がオフ」と赤く警告される | 自動：SyncStatusTest.unreliableReadingIsNotShownAsError（アプリからオンにしても読み取りがオフのままなら「不正確」として警告しない）。目視：［自動同期をオンにする］の後に読み取りがオフのままなら案内に切り替わる |
+| 34 | 同期の状態がちゃんと分からない・同期が確実に動かない | 自動：SyncStatusTest（fix の判定・「最後の同期」の表示・未送信件数）。目視：manifest に WRITE_SYNC_SETTINGS、カレンダー管理に「最後の同期」「詳しく」（生の値）・［今すぐ同期］（MANUAL+EXPEDITED、自動同期オフでも動く）・［自動同期をオンにする］（アプリ内で setSyncAutomatically / setMasterSyncAutomatically）。CalendarRepository の全書き込み（追加・変更・時刻変更・この回のみ・すべて・これ以降・削除）と添付の説明更新の後に sync.localChanged()（UPLOAD を依頼）。アプリを開いたとき requestIfStale、メニュー「今すぐ同期」、月ウィジェットの見出しタップでも同期を依頼 |
+
+| 35 | 月ウィジェットの動作が重い、今日に戻るボタンが欲しい | 自動：SyncStatusTest.monthWidgetShowsThisMonthAndTwoMore（今月から 3 か月だけ読む）。目視：上へは今月より前に行かない、見出し「本日：…」タップで今月の先頭へ戻る |
+| 36 | 同期の状態が見えず「設定を確認できませんでした」になる・同期の依頼が効かない（Android 13 以降、見えないアカウントは読み取りが常にオフ・依頼は無視） | 自動：SyncStatusTest.invisibleAccountIsNotReportedAsOff。目視：見えないアカウントは赤くせず［見られるようにする］（AccountManager.newChooseAccountIntent）、依頼は requestSync(null, …)（アカウント指定なし）で必ず届く、進み具合は getCurrentSyncs |
+| 37 | 同期の進捗と完了が分からない | 自動：SyncStatusTest.syncProgressDone。目視：同期中は上のバーの下に細い線、カレンダー管理に「同期しています…」、押した同期は「同期が完了しました（H:mm）」か、60 秒で「同期を頼みました…」と表示 |
+| 38 | 予定の詳細の作成者に共有カレンダーの ID が出る | 目視：予定の詳細に「作成者」を出さない（ユーザーの判断で表示なし） |
+| 39 | 添付のプレビューが切れる・出すか選べない | 目視：画像・PDF は ContentScale.Fit で全体（縦長は最大 420dp）、設定 → 添付ファイル →「画像・PDF のプレビューを表示」でオフにできる |
+| 40 | 設定やカレンダー管理の背景がメニューと違う、ウィジェットの見た目がアプリの設定にある | 目視：設定・カレンダーと Google 連携・アップデートは MenuTheme。設定トップに「ウィジェットの見た目」が無い（ウィジェット長押しの設定だけ） |
+| 41 | メニューを開いたままアプリを閉じ、ウィジェットの予定から開くとメニューが開いたまま | 目視：MainActivity.handleIntent で外から開いたらメニュー・設定・カレンダー管理を閉じる（closeDrawer は replay 1 で再生成時も閉じる） |
+| 42 | 今日ボタンを中央、検索を右上に | 目視：上のバーは左にメニューと年月（入りきらないと文字を小さく）、中央に［今日］、右上に検索 |
+| 43 | 添付ファイルがどの予定のものか分からない | 自動：AttachmentServiceTest.driveFileNameHasDateAndTitle（「日付_予定名_元の名前」）。目視：詳細からの添付・入力画面からの添付の両方で付く |
+| 44 | 予定を消したときの添付ファイルの扱い | 目視：単発・「すべて」の削除で添付があれば「添付ファイルも削除しますか？」（［ファイルは残す］／［ファイルも削除］、外側タップでやめる）。「元に戻す」なら消さない。「この予定のみ」「これ以降」では聞かない |
+| 45 | メニューに最終同期日時が無い | 目視：メニューの「カレンダーと Google 連携」の下に「最後の同期：…」、同期中は「同期しています…」 |
+| 46 | 同期画面がややこしい | 自動：SyncStatusTest.summaryShowsOnlyOneState。目視：一番上に 1 枚だけ（最新です／同期しています…／送信待ち N 件／同期が止まっています［直す］／確認できません［直す］）。アカウントの見出しには問題があるときだけ一言。細かい値は ︙ →「困ったとき（詳しい状態）」。同期していないカレンダーは「＋ ほかのカレンダーを追加」 |
+| 47 | ［直す］で全部まとめて直す | 目視：全体の自動同期オフなら確認ダイアログ → 見えないアカウントは標準のアカウント選択を順に → 見えるアカウントはカレンダー同期オン → 同期。直せなかったアカウントを知らせる |
+| 48 | 初回に同期の準備を案内 | 目視：通知の質問のあと、準備が要るアカウントがあれば「Google カレンダーと同期する準備」（［準備する］でカレンダーと同期の画面を開き［直す］を自動で実行、［あとで］）。1 回だけ |
+| 49 | 下に引っぱって同期 | 目視：カレンダーの一番上で下に引っぱると今すぐ同期（PullToRefreshBox）、終わると「同期が完了しました」 |
+| 50 | Google にまだ届いていない予定が分からない | 自動：SyncStatusTest.pendingUploadMark。目視：DIRTY=1 の予定は月・週・日・予定リスト・日の一覧で先頭に「↑」、詳細に「Google へ送信待ち」。送られると自動で消える |
+作業環境のビルドと単体テストが成功し、上の目視項目を確認してからリリースする。

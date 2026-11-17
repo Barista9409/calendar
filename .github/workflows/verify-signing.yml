@@ -1,0 +1,42 @@
+name: Verify signing secrets
+
+# 署名用 Secrets が正しく登録されているかを確認する（何も公開・変更しない）
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/verify-signing.yml
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - name: Check keystore, alias and passwords
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          set -u
+          for n in KEYSTORE_BASE64 KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
+            [ -n "${!n}" ] || { echo "::error::Secret $n が未登録です"; exit 1; }
+          done
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/k.jks" || { echo "::error::KEYSTORE_BASE64 をデコードできません"; exit 1; }
+          keytool -list -keystore "$RUNNER_TEMP/k.jks" -storepass "$KEYSTORE_PASSWORD" -alias "$KEY_ALIAS" >/dev/null \
+            || { echo "::error::キーストアのパスワードまたはエイリアスが一致しません"; rm -f "$RUNNER_TEMP/k.jks"; exit 1; }
+          # 鍵のパスワード確認（一時キーストアへのエクスポートで検証）
+          keytool -importkeystore -srckeystore "$RUNNER_TEMP/k.jks" -srcstorepass "$KEYSTORE_PASSWORD" -srcalias "$KEY_ALIAS" \
+            -srckeypass "$KEY_PASSWORD" -destkeystore "$RUNNER_TEMP/t.p12" -deststoretype PKCS12 -deststorepass changeit-tmp \
+            -destkeypass changeit-tmp -noprompt >/dev/null 2>&1 \
+            || { echo "::error::KEY_PASSWORD が一致しません"; rm -f "$RUNNER_TEMP"/k.jks "$RUNNER_TEMP"/t.p12; exit 1; }
+          echo "SHA-1: $(keytool -list -v -keystore "$RUNNER_TEMP/k.jks" -storepass "$KEYSTORE_PASSWORD" -alias "$KEY_ALIAS" | grep -m1 'SHA1:' | awk '{print $2}')"
+          rm -f "$RUNNER_TEMP"/k.jks "$RUNNER_TEMP"/t.p12
+          echo "OK: 署名用 Secrets は正しく登録されています"

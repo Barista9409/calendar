@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Calendar</string>
+    <string name="widget_month">月</string>
+    <string name="widget_day">日（予定リスト）</string>
+    <string name="widget_month_desc">月のカレンダーと予定</string>
+    <string name="widget_day_desc">今日からの予定を一覧で表示</string>
+    <string name="channel_update">アップデート</string>
+</resources>

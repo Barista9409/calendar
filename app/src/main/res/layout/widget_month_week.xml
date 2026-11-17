@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:id="@+id/week_root" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+    <!-- 左の月の列：その週の月（月が変わる週は強調） -->
+    <FrameLayout android:id="@+id/rail" android:layout_width="40dp" android:layout_height="match_parent">
+        <TextView android:id="@+id/rail_text" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="top|center_horizontal" android:layout_marginTop="4dp" android:paddingStart="5dp" android:paddingEnd="5dp" android:textSize="13sp" android:textStyle="bold" android:maxLines="1" android:includeFontPadding="false"/>
+    </FrameLayout>
+    <FrameLayout android:id="@+id/rail_line" android:layout_width="1dp" android:layout_height="match_parent"/>
+    <FrameLayout android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="horizontal">
+        <FrameLayout android:id="@+id/day0" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"/>
+        <FrameLayout android:id="@+id/day1" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"/>
+        <FrameLayout android:id="@+id/day2" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"/>
+        <FrameLayout android:id="@+id/day3" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"/>
+        <FrameLayout android:id="@+id/day4" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"/>
+        <FrameLayout android:id="@+id/day5" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"/>
+        <FrameLayout android:id="@+id/day6" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"/>
+    </LinearLayout>
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
+        <FrameLayout android:id="@+id/hline" android:layout_width="match_parent" android:layout_height="1dp"/>
+        <LinearLayout android:layout_width="match_parent" android:layout_height="23dp" android:orientation="horizontal">
+        <FrameLayout android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1">
+            <TextView android:id="@+id/num0" android:layout_width="wrap_content" android:layout_height="20dp" android:minWidth="20dp" android:layout_gravity="center" android:gravity="center" android:paddingStart="3dp" android:paddingEnd="3dp" android:textSize="12sp" android:textStyle="bold" android:maxLines="1" android:includeFontPadding="false"/>
+        </FrameLayout>
+        <FrameLayout android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1">
+            <TextView android:id="@+id/num1" android:layout_width="wrap_content" android:layout_height="20dp" android:minWidth="20dp" android:layout_gravity="center" android:gravity="center" android:paddingStart="3dp" android:paddingEnd="3dp" android:textSize="12sp" android:textStyle="bold" android:maxLines="1" android:includeFontPadding="false"/>
+        </FrameLayout>
+        <FrameLayout android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1">
+            <TextView android:id="@+id/num2" android:layout_width="wrap_content" android:layout_height="20dp" android:minWidth="20dp" android:layout_gravity="center" android:gravity="center" android:paddingStart="3dp" android:paddingEnd="3dp" android:textSize="12sp" android:textStyle="bold" android:maxLines="1" android:includeFontPadding="false"/>
+        </FrameLayout>
+        <FrameLayout android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1">
+            <TextView android:id="@+id/num3" android:layout_width="wrap_content" android:layout_height="20dp" android:minWidth="20dp" android:layout_gravity="center" android:gravity="center" android:paddingStart="3dp" android:paddingEnd="3dp" android:textSize="12sp" android:textStyle="bold" android:maxLines="1" android:includeFontPadding="false"/>
+        </FrameLayout>
+        <FrameLayout android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1">
+            <TextView android:id="@+id/num4" android:layout_width="wrap_content" android:layout_height="20dp" android:minWidth="20dp" android:layout_gravity="center" android:gravity="center" android:paddingStart="3dp" android:paddingEnd="3dp" android:textSize="12sp" android:textStyle="bold" android:maxLines="1" android:includeFontPadding="false"/>
+        </FrameLayout>
+        <FrameLayout android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1">
+            <TextView android:id="@+id/num5" android:layout_width="wrap_content" android:layout_height="20dp" android:minWidth="20dp" android:layout_gravity="center" android:gravity="center" android:paddingStart="3dp" android:paddingEnd="3dp" android:textSize="12sp" android:textStyle="bold" android:maxLines="1" android:includeFontPadding="false"/>
+        </FrameLayout>
+        <FrameLayout android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1">
+            <TextView android:id="@+id/num6" android:layout_width="wrap_content" android:layout_height="20dp" android:minWidth="20dp" android:layout_gravity="center" android:gravity="center" android:paddingStart="3dp" android:paddingEnd="3dp" android:textSize="12sp" android:textStyle="bold" android:maxLines="1" android:includeFontPadding="false"/>
+        </FrameLayout>
+        </LinearLayout>
+        <LinearLayout android:id="@+id/lanes" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical"/>
+    </LinearLayout>
+</FrameLayout>
+</LinearLayout>

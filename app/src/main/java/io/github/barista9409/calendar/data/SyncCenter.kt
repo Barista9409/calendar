@@ -1,0 +1,245 @@
+package io.github.barista9409.calendar.data
+
+import android.accounts.Account
+import android.accounts.AccountManager
+import android.content.ContentResolver
+import android.content.Context
+import android.content.Intent
+import android.database.ContentObserver
+import android.os.Bundle
+import android.os.Handler
+import android.os.HandlerThread
+import android.provider.CalendarContract
+import android.provider.CalendarContract.Calendars
+import android.provider.CalendarContract.Events
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
+
+/** 同期の進み具合（画面の上の線と「同期が完了しました」の表示に使う） */
+data class SyncRun(
+    val running: Boolean = false,
+    val startedAt: Long = 0L,
+    val finishedAt: Long = 0L,
+    /** ユーザーが押した同期か（押したときだけ完了を知らせる） */
+    val manual: Boolean = false,
+    /** 時間内に終わったのを確認できたか */
+    val confirmed: Boolean = false,
+)
+
+/**
+ * スマホの Google カレンダー同期を見守り、確実に動かす。
+ *
+ * 大事な仕組み（Android 13 以降）：
+ * - 同期の設定の読み書きや「このアカウントを同期して」という依頼は、アプリから「見える」アカウントにしか効かない
+ *   （見えないと、読み取りは常に「オフ」、依頼は黙って無視される。ContentService の hasAccountAccess）。
+ * - アカウントを見えるようにするには、Android 標準の「アカウントの選択」画面で選んでもらう（AccountManager.newChooseAccountIntent）。
+ *   Google の審査は不要。
+ * - アカウントを指定しない依頼（requestSync(null, …)）は見えなくても通り、カレンダーの全アカウントが同期される。
+ * - 動いている同期の一覧（getCurrentSyncs）はアカウントが見えなくても読めるので、進み具合はこれで分かる。
+ */
+class SyncCenter(private val context: Context) {
+    private val sp = context.getSharedPreferences("sync_state", Context.MODE_PRIVATE)
+    private val worker = HandlerThread("sync-watch").apply { start() }
+    private val h = Handler(worker.looper)
+    private val auth = CalendarContract.AUTHORITY
+
+    private val _run = MutableStateFlow(SyncRun())
+    val run: StateFlow<SyncRun> = _run.asStateFlow()
+    private val _finished = MutableSharedFlow<SyncRun>(extraBufferCapacity = 4)
+    val finished: SharedFlow<SyncRun> = _finished.asSharedFlow()
+
+    private fun acc(name: String) = Account(name, GOOGLE)
+
+    /** スマホに入っている Google アカウント（カレンダーがあるもの） */
+    fun googleAccounts(): List<String> = runCatching {
+        val out = linkedSetOf<String>()
+        context.contentResolver.query(Calendars.CONTENT_URI, arrayOf(Calendars.ACCOUNT_NAME),
+            "${Calendars.ACCOUNT_TYPE}=?", arrayOf(GOOGLE), null)?.use { c ->
+            while (c.moveToNext()) c.getString(0)?.let { out += it }
+        }
+        out.toList()
+    }.getOrDefault(emptyList())
+
+    /** このアプリから見えるアカウントか（見えないと、同期の設定は読めず、アカウント指定の依頼も効かない） */
+    fun hasAccess(account: String): Boolean = runCatching {
+        AccountManager.get(context).getAccountsByType(GOOGLE).any { it.name == account }
+    }.getOrDefault(false)
+
+    /** アカウントを見えるようにする画面（Android 標準の「アカウントの選択」） */
+    fun chooseAccountIntent(account: String): Intent = AccountManager.newChooseAccountIntent(
+        acc(account), null, arrayOf(GOOGLE),
+        "このアプリでカレンダーの同期の状態を見て、同期を頼めるようにします。$account を選んでください。",
+        null, null, null)
+
+    private fun extras(upload: Boolean) = Bundle().apply {
+        putBoolean(ContentResolver.SYNC_EXTRAS_MANUAL, true)
+        putBoolean(ContentResolver.SYNC_EXTRAS_EXPEDITED, true)
+        if (upload) putBoolean(ContentResolver.SYNC_EXTRAS_UPLOAD, true)
+    }
+
+    /** 今すぐ同期を頼む（自動同期がオフでも 1 回は同期される） */
+    fun request(account: String, upload: Boolean = false, manual: Boolean = false) {
+        if (hasAccess(account)) runCatching { ContentResolver.requestSync(acc(account), auth, extras(upload)) }
+        // 見えないアカウントは、アカウントを指定せずに頼む（こちらは必ず届く）
+        else runCatching { ContentResolver.requestSync(null, auth, extras(upload)) }
+        sp.edit().putLong("req_$account", System.currentTimeMillis()).apply()
+        begin(manual)
+    }
+
+    /** すべてのアカウントを今すぐ同期 */
+    fun requestAll(upload: Boolean = false, manual: Boolean = false) {
+        runCatching { ContentResolver.requestSync(null, auth, extras(upload)) }
+        val now = System.currentTimeMillis()
+        val e = sp.edit()
+        googleAccounts().forEach { e.putLong("req_$it", now) }
+        e.apply()
+        begin(manual)
+    }
+
+    /** アプリを開いたときなど。前回頼んでから minGapMs 以上たっていれば同期を頼む */
+    fun requestIfStale(minGapMs: Long = 5 * 60_000L) {
+        val now = System.currentTimeMillis()
+        val accounts = googleAccounts()
+        if (accounts.any { now - maxOf(lastRequestAt(it), lastSyncAt(it)) >= minGapMs }) requestAll()
+    }
+
+    private val sendLater = Runnable { requestAll(upload = true) }
+
+    /** このアプリで予定を変えた直後に呼ぶ（少し待ってまとめて送信を頼む） */
+    fun localChanged() {
+        h.removeCallbacks(sendLater)
+        h.postDelayed(sendLater, 1500)
+    }
+
+    /** そのアカウントのカレンダー自動同期をオンにする（アカウントが見えているときだけ効く） */
+    fun turnOnAccountSync(account: String): Boolean {
+        val a = acc(account)
+        runCatching { if (ContentResolver.getIsSyncable(a, auth) == 0) ContentResolver.setIsSyncable(a, auth, 1) }
+        runCatching { ContentResolver.setSyncAutomatically(a, auth, true) }
+        request(account, manual = true)
+        return runCatching { ContentResolver.getSyncAutomatically(a, auth) }.getOrDefault(false)
+    }
+
+    /** スマホ全体の自動同期をオンにする */
+    fun turnOnMasterSync(): Boolean {
+        runCatching { ContentResolver.setMasterSyncAutomatically(true) }
+        requestAll(manual = true)
+        return runCatching { ContentResolver.getMasterSyncAutomatically() }.getOrDefault(false)
+    }
+
+    /** まだ Google に送っていない変更の数（読み取れないときは null） */
+    fun dirtyCount(account: String? = null): Int? = runCatching {
+        val sel = "${Events.DIRTY}=1 AND ${Events.ACCOUNT_TYPE}=?" + if (account != null) " AND ${Events.ACCOUNT_NAME}=?" else ""
+        val args = if (account != null) arrayOf(GOOGLE, account) else arrayOf(GOOGLE)
+        context.contentResolver.query(Events.CONTENT_URI, arrayOf(Events._ID), sel, args, null)?.use { it.count }
+    }.getOrNull()
+
+    /** カレンダーの同期がいま動いているか（アカウントが見えなくても分かる） */
+    fun calendarSyncRunning(): Boolean = runCatching {
+        ContentResolver.getCurrentSyncs().any { it.authority == auth }
+    }.getOrDefault(false)
+
+    fun lastSyncAt(account: String) = sp.getLong("done_$account", 0L)
+    fun lastRequestAt(account: String) = sp.getLong("req_$account", 0L)
+
+    fun status(account: String, unsynced: Int = 0): SyncStatus {
+        val a = acc(account)
+        val access = hasAccess(account)
+        val running = calendarSyncRunning()
+        return SyncStatus(
+            account = account,
+            masterOn = runCatching { ContentResolver.getMasterSyncAutomatically() }.getOrDefault(true),
+            accountOn = if (access) runCatching { ContentResolver.getSyncAutomatically(a, auth) }.getOrDefault(true) else true,
+            active = running || (access && runCatching { ContentResolver.isSyncActive(a, auth) }.getOrDefault(false)),
+            pending = access && runCatching { ContentResolver.isSyncPending(a, auth) }.getOrDefault(false),
+            unsynced = unsynced,
+            syncable = if (access) runCatching { ContentResolver.getIsSyncable(a, auth) }.getOrDefault(1) else 1,
+            dirty = dirtyCount(account) ?: 0,
+            lastSyncAt = lastSyncAt(account),
+            lastRequestAt = lastRequestAt(account),
+            access = access,
+        )
+    }
+
+    // ---------------- 進み具合の見守り ----------------
+
+    @Volatile private var lastChangeAt = 0L
+    @Volatile private var sawRunning = false
+    private var started = false
+
+    /** アプリが動いている間、同期の始まり・終わりとカレンダーの書き換えを見守る */
+    fun startWatching() {
+        if (started) return
+        started = true
+        runCatching {
+            context.contentResolver.registerContentObserver(CalendarContract.CONTENT_URI, true, object : ContentObserver(h) {
+                override fun onChange(selfChange: Boolean) { lastChangeAt = System.currentTimeMillis() }
+            })
+        }
+        val mask = ContentResolver.SYNC_OBSERVER_TYPE_ACTIVE or ContentResolver.SYNC_OBSERVER_TYPE_PENDING
+        runCatching { ContentResolver.addStatusChangeListener(mask) { h.post { tick() } } }
+    }
+
+    private fun begin(manual: Boolean) {
+        h.post {
+            val cur = _run.value
+            if (cur.running) {
+                if (manual && !cur.manual) _run.value = cur.copy(manual = true)
+                return@post
+            }
+            sawRunning = false
+            _run.value = SyncRun(running = true, startedAt = System.currentTimeMillis(), manual = manual)
+            h.removeCallbacks(ticker)
+            h.postDelayed(ticker, 1000)
+        }
+    }
+
+    private val ticker = object : Runnable {
+        override fun run() { if (tick()) h.postDelayed(this, 1000) }
+    }
+
+    /** 進み具合を判定する。続けるなら true */
+    private fun tick(): Boolean {
+        val cur = _run.value
+        if (!cur.running) return false
+        val now = System.currentTimeMillis()
+        val running = calendarSyncRunning()
+        if (running) sawRunning = true
+        val elapsed = now - cur.startedAt
+        val quiet = now - lastChangeAt >= 2500
+        val dirty = dirtyCount() ?: 0
+        val done = SyncProgress.isDone(elapsed, running, sawRunning, lastChangeAt > cur.startedAt, quiet, dirty)
+        val timeout = elapsed >= SyncProgress.TIMEOUT_MS
+        if (!done && !timeout) return true
+        val fin = cur.copy(running = false, finishedAt = now, confirmed = done)
+        if (done) {
+            val e = sp.edit()
+            googleAccounts().forEach { e.putLong("done_$it", now) }
+            e.apply()
+        }
+        _run.value = fin
+        _finished.tryEmit(fin)
+        return false
+    }
+
+    companion object { const val GOOGLE = "com.google" }
+}
+
+/** 同期が終わったかの判定（テストしやすいように分けている） */
+object SyncProgress {
+    const val TIMEOUT_MS = 60_000L
+
+    /**
+     * - 同期が動いているのを見て、それが止まった
+     * - または、頼んだあとにカレンダーが書き換わり、2.5 秒静かになった
+     * のどちらかで、未送信の変更が残っていなければ完了
+     */
+    fun isDone(elapsedMs: Long, running: Boolean, sawRunning: Boolean, changedAfterStart: Boolean, quiet: Boolean, dirty: Int): Boolean {
+        if (elapsedMs < 2000 || running || dirty > 0) return false
+        return sawRunning || (changedAfterStart && quiet)
+    }
+}

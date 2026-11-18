@@ -43,6 +43,16 @@ class SyncStatusTest {
         assertEquals("最後の同期：今日 14:03", SyncSummary.of(f(last = t, running = true), today, zone).last)
     }
 
+    @Test fun finishedSyncUpdatesLastSync() {
+        // 押した同期が終わったら、終わった時刻が「最後の同期」になる（押す前の時刻のままにしない）
+        val P = io.github.barista9409.calendar.data.SyncProgress
+        assertTrue(P.finishedOk(done = true, timedOut = false, pending = 0))
+        assertTrue(P.finishedOk(done = false, timedOut = true, pending = 0))
+        // このアプリの変更がまだ届いていなければ、終わったことにしない（「送信待ち」のまま）
+        assertFalse(P.finishedOk(done = false, timedOut = true, pending = 1))
+        assertFalse(P.finishedOk(done = false, timedOut = false, pending = 0))
+    }
+
     @Test fun externalChangeCountsAsSync() {
         // このアプリが書き換えた直後の変化は数えない。それ以外（Google から届いた変更）は「同期した」と数える
         val P = io.github.barista9409.calendar.data.SyncProgress

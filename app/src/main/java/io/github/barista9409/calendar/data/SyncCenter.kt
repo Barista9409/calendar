@@ -325,8 +325,11 @@ class SyncCenter(private val context: Context) {
         val done = SyncProgress.isDone(elapsed, running, sawRunning, changed, quiet, pend)
         val timeout = elapsed >= SyncProgress.TIMEOUT_MS
         if (!done && !timeout) return true
-        val fin = cur.copy(running = false, finishedAt = now, confirmed = done)
-        if (done) markSynced()
+        // 同期の動きが見えなくても（端末によっては見えない）、このアプリの変更がすべて届いていれば、
+        // 頼んだ同期は終わったものとして、終わった時刻を「最後の同期」にする（押す前の時刻のままにしない）
+        val ok = SyncProgress.finishedOk(done, timeout, pend)
+        val fin = cur.copy(running = false, finishedAt = now, confirmed = ok)
+        if (ok) markSynced()
         _run.value = fin
         _finished.tryEmit(fin)
         return false
@@ -337,6 +340,9 @@ class SyncCenter(private val context: Context) {
 
 /** 同期が終わったかの判定（テストしやすいように分けている） */
 object SyncProgress {
+    /** 頼んだ同期を「終わった」と扱うか：動きを見て終わった、または待ち切ってこのアプリの変更がすべて届いている */
+    fun finishedOk(done: Boolean, timedOut: Boolean, pending: Int): Boolean = done || (timedOut && pending == 0)
+
     /** これだけ待っても同期の動きが見えなければ、見守りを終える（端末によっては頼んでも動きが見えない） */
     const val TIMEOUT_MS = 20_000L
 

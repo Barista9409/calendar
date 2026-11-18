@@ -516,8 +516,14 @@ private fun AppDrawer(
                 selected = false, onClick = onCalendars, modifier = Modifier.padding(horizontal = 12.dp))
             NavigationDrawerItem(label = { Text("設定") }, icon = { Icon(Icons.Outlined.Tune, null) },
                 selected = false, onClick = onSettings, modifier = Modifier.padding(horizontal = 12.dp))
-            NavigationDrawerItem(label = { Text("今すぐ同期") }, icon = { Icon(Icons.Outlined.Refresh, null) },
-                selected = false, onClick = onRefresh, modifier = Modifier.padding(horizontal = 12.dp))
+            // 同期中は、メニューを開き直しても終わるまで「同期しています…」とくるくるを出す
+            NavigationDrawerItem(
+                label = { Text(if (run.running) "同期しています…" else "今すぐ同期") },
+                icon = {
+                    if (run.running) androidx.compose.material3.CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.5.dp)
+                    else Icon(Icons.Outlined.Refresh, null)
+                },
+                selected = false, onClick = { if (!run.running) onRefresh() }, modifier = Modifier.padding(horizontal = 12.dp))
             NavigationDrawerItem(label = { Text("アップデート") }, icon = { Icon(Icons.Outlined.SystemUpdate, null) },
                 selected = false, onClick = onUpdate, modifier = Modifier.padding(horizontal = 12.dp))
             var share by remember { mutableStateOf(false) }

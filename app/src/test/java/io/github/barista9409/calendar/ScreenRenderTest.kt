@@ -65,4 +65,19 @@ class ScreenRenderTest {
         rule.setContent { CalendarTheme { MenuTheme { io.github.barista9409.calendar.ui.settings.UpdateScreen(onBack = {}) } } }
         rule.waitForIdle()
     }
+
+    @Test fun menuShowsSyncingWhileRunning() {
+        // 同期中にメニューを開き直しても、終わるまで「同期しています…」を出し続ける
+        val app = androidx.test.core.app.ApplicationProvider.getApplicationContext<CalendarApp>()
+        val vm = CalendarViewModel(app)
+        rule.setContent { CalendarTheme { CalendarScreen(vm, onOpenUpdate = {}, onOpenCalendars = {}, onOpenSettings = {}) } }
+        app.container.sync.requestAll(manual = true)
+        rule.waitUntil(5_000) { app.container.sync.run.value.running }
+        repeat(2) {
+            rule.onNodeWithContentDescription("メニュー").performClick()
+            rule.waitUntil(5_000) { rule.onAllNodesWithText("同期しています…").fetchSemanticsNodes().isNotEmpty() }
+            vm.requestCloseDrawer()
+            rule.waitForIdle()
+        }
+    }
 }

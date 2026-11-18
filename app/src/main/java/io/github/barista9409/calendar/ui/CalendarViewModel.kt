@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -89,7 +90,6 @@ class CalendarViewModel(app: Application) : AndroidViewModel(app) {
     private val _calendars = MutableStateFlow<List<CalendarInfo>>(emptyList())
     val calendars: StateFlow<List<CalendarInfo>> = _calendars.asStateFlow()
     val hiddenCalendars: StateFlow<Set<Long>> = prefs.hiddenCalendars
-    val accountFilter: StateFlow<String?> = prefs.accountFilter
 
     private val _events = MutableStateFlow<List<EventInstance>>(emptyList())
     private var loadedFrom: LocalDate? = null
@@ -139,14 +139,12 @@ class CalendarViewModel(app: Application) : AndroidViewModel(app) {
     private val tokenGen = AtomicLong(1)
 
     val visibleCalendars: StateFlow<List<CalendarInfo>> =
-        combine(_calendars, prefs.hiddenCalendars, prefs.accountFilter) { cals, hidden, acc ->
-            cals.filter { it.id !in hidden && (acc == null || it.accountName == acc) }
+        combine(_calendars, prefs.hiddenCalendars) { cals, hidden ->
+            cals.filter { it.id !in hidden }
         }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     val writableCalendars: StateFlow<List<CalendarInfo>> =
-        combine(_calendars, prefs.accountFilter) { cals, acc ->
-            cals.filter { it.writable && (acc == null || it.accountName == acc) }.ifEmpty { cals.filter { it.writable } }
-        }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+        _calendars.map { cals -> cals.filter { it.writable } }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     /** 祝日カレンダーに予定がある日（日付を赤く表示する） */
     val holidays: StateFlow<Set<LocalDate>> = combine(_events, _calendars) { evs, cals ->
@@ -248,7 +246,10 @@ class CalendarViewModel(app: Application) : AndroidViewModel(app) {
     fun setCalendarVisible(id: Long, visible: Boolean) {
         prefs.setCalendarVisible(id, visible)
     }
-    fun setAccountFilter(account: String?) = prefs.setAccountFilter(account)
+    /** アカウントのカレンダーを、まとめて表示・非表示 */
+    fun setAccountVisible(account: String, visible: Boolean) {
+        _calendars.value.filter { it.accountName == account }.forEach { prefs.setCalendarVisible(it.id, visible) }
+    }
 
     // ---- シート ----
     fun openDay(date: LocalDate) {

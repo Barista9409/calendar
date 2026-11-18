@@ -72,6 +72,7 @@ import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.SystemUpdate
 import androidx.compose.material.icons.outlined.Share
+import androidx.compose.material.icons.outlined.Sync
 import androidx.compose.material.icons.outlined.Widgets
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -82,12 +83,12 @@ import io.github.barista9409.calendar.data.Prefs
 /** 設定の各画面 */
 private enum class Page(val title: String) {
     TOP("設定"), APPEARANCE("色とテーマ"), DISPLAY("カレンダーの表示"), NOTIFY("通知"),
-    ATTACH("添付ファイル"), ACCOUNTS("アカウント"),
+    ATTACH("添付ファイル"),
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(onBack: () -> Unit, onOpenUpdate: () -> Unit = {}) {
+fun SettingsScreen(onBack: () -> Unit, onOpenUpdate: () -> Unit = {}, onOpenCalendars: () -> Unit = {}, onOpenSync: () -> Unit = {}) {
     var page by remember { mutableStateOf(Page.TOP) }
     val snackbar = remember { SnackbarHostState() }
     BackHandler(enabled = page != Page.TOP) { page = Page.TOP }
@@ -106,12 +107,11 @@ fun SettingsScreen(onBack: () -> Unit, onOpenUpdate: () -> Unit = {}) {
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             when (page) {
-                Page.TOP -> TopPage(onOpen = { page = it }, onOpenUpdate = onOpenUpdate)
+                Page.TOP -> TopPage(onOpen = { page = it }, onOpenUpdate = onOpenUpdate, onOpenCalendars = onOpenCalendars, onOpenSync = onOpenSync)
                 Page.APPEARANCE -> AppearancePage()
                 Page.DISPLAY -> DisplayPage()
                 Page.NOTIFY -> NotifyPage()
                 Page.ATTACH -> AttachPage(snackbar)
-                Page.ACCOUNTS -> AccountsPage()
             }
             Spacer(Modifier.height(24.dp))
         }
@@ -121,7 +121,11 @@ fun SettingsScreen(onBack: () -> Unit, onOpenUpdate: () -> Unit = {}) {
 // ---------------- トップ：種類ごとに分類 ----------------
 
 @Composable
-private fun TopPage(onOpen: (Page) -> Unit, onOpenUpdate: () -> Unit) {
+private fun TopPage(onOpen: (Page) -> Unit, onOpenUpdate: () -> Unit, onOpenCalendars: () -> Unit, onOpenSync: () -> Unit) {
+    Group("アカウントと同期") {
+        NavRow(Icons.Outlined.Person, Color(0xFF3F444E), "アカウントとカレンダー", "アカウントの追加・Google 連携・カレンダーの追加") { onOpenCalendars() }
+        NavRow(Icons.Outlined.Sync, Color(0xFF0E6670), "同期", "同期の状態・困ったとき") { onOpenSync() }
+    }
     Group("見た目") {
         NavRow(Icons.Outlined.Palette, Color(0xFF2443A8), "色とテーマ", "明るさ・メインの色・背景の色と透け具合") { onOpen(Page.APPEARANCE) }
         NavRow(Icons.Outlined.CalendarMonth, Color(0xFF1E6B47), "カレンダーの表示", "週表示の列の幅") { onOpen(Page.DISPLAY) }
@@ -131,8 +135,7 @@ private fun TopPage(onOpen: (Page) -> Unit, onOpenUpdate: () -> Unit) {
         NavRow(Icons.Outlined.AttachFile, Color(0xFF6B21A8), "添付ファイル", "Google ドライブの保存先・一時ファイル") { onOpen(Page.ATTACH) }
     }
     // ウィジェットの見た目は、ホーム画面でウィジェットを長押し →「設定」だけで変える
-    Group("アカウントとアプリ") {
-        NavRow(Icons.Outlined.Person, Color(0xFF3F444E), "アカウント", "追加・表示するアカウント") { onOpen(Page.ACCOUNTS) }
+    Group("このアプリについて") {
         NavRow(Icons.Outlined.SystemUpdate, Color(0xFF3F444E), "アップデート", "バージョン ${BuildConfig.VERSION_NAME}") { onOpenUpdate() }
         var share by remember { mutableStateOf(false) }
         NavRow(Icons.Outlined.Share, Color(0xFF3F444E), "このアプリを共有", "ダウンロード先と説明をコピー・送る") { share = true }
@@ -483,7 +486,7 @@ private fun AttachPage(snackbar: SnackbarHostState) {
         Text("マイドライブ ／ ${io.github.barista9409.calendar.google.AttachmentService.ROOT_NAME}", fontSize = 15.sp)
         Hint("最初に添付したとき、アプリがこのフォルダを作ります。ドライブ上で好きな場所へ移動したり、名前を変えたりしても使い続けられます。")
         Hint("添付したファイルは「リンクを知っている人なら閲覧可」になり、予定の説明にリンクが入ります。家族も Google カレンダーアプリやこのアプリから開けます。")
-        if (linked.isEmpty()) Hint("添付ファイルを使うには、メニューの「カレンダーと同期」から Google と連携してください。")
+        if (linked.isEmpty()) Hint("添付ファイルを使うには、設定 →「アカウントとカレンダー」から Google と連携してください。")
         linked.sorted().forEach { acc ->
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
@@ -518,53 +521,6 @@ private fun AttachPage(snackbar: SnackbarHostState) {
             }
             TextButton(onClick = { scope.launch { c.attachments.store.clear(); refresh++; snackbar.showSnackbar("一時ファイルを削除しました") } }) { Text("削除") }
         }
-    }
-}
-
-// ---------------- アカウント ----------------
-
-@Composable
-private fun AccountsPage() {
-    val context = LocalContext.current
-    val c = context.container
-    val scheme = MaterialTheme.colorScheme
-    val linked by c.prefs.linkedAccounts.collectAsState()
-    val hiddenAccounts by c.prefs.hiddenAccounts.collectAsState()
-    val accounts by produceState(emptyList<Pair<String, Boolean>>(), hiddenAccounts) {
-        value = c.repository.calendars(includeHiddenAccounts = true).groupBy { it.accountName }.map { (a, l) -> a to l.any { it.isGoogle } }
-    }
-    Section("このアプリで表示するアカウント") {
-        accounts.forEach { (acc, isGoogle) ->
-            var confirm by remember { mutableStateOf(false) }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text(acc, fontSize = 15.sp)
-                    Hint(buildString {
-                        append(if (acc in hiddenAccounts) "このアプリでは非表示" else "表示中")
-                        if (isGoogle) append(if (acc in linked) "・Google と連携済み" else "・未連携")
-                    })
-                }
-                Switch(acc !in hiddenAccounts, { c.prefs.setAccountHidden(acc, !it) })
-                TextButton(onClick = { confirm = true }) { Text("削除", color = scheme.error) }
-            }
-            if (confirm) {
-                AlertDialog(
-                    onDismissRequest = { confirm = false },
-                    title = { Text("「$acc」を端末から削除") },
-                    text = { Text("アカウントの削除は Android の設定で行います（Google の仕様で、アプリから直接は削除できません）。開いた画面の「アカウントを削除」を押してください。\nこのアプリで見えなくするだけなら、スイッチをオフにしてください。") },
-                    confirmButton = {
-                        TextButton(onClick = {
-                            confirm = false
-                            val i = Intent("android.settings.ACCOUNT_SYNC_SETTINGS").putExtra("account", android.accounts.Account(acc, "com.google"))
-                            runCatching { context.startActivity(i) }.onFailure { context.startActivity(Intent(android.provider.Settings.ACTION_SYNC_SETTINGS)) }
-                        }) { Text("設定を開く") }
-                    },
-                    dismissButton = { TextButton(onClick = { confirm = false }) { Text("キャンセル") } },
-                )
-            }
-        }
-        Button(onClick = { context.startActivity(io.github.barista9409.calendar.ui.addAccountIntent()) }) { Text("＋ アカウントを追加") }
-        Hint("追加したアカウントは、端末のカレンダー同期が終わると表示されます。")
     }
 }
 

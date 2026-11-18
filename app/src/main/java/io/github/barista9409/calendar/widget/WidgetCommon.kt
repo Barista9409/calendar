@@ -123,14 +123,13 @@ fun widgetTheme(context: Context): WTheme {
 }
 
 object WidgetData {
-    /** 表示中のカレンダー（設定で非表示・アカウント絞り込みを反映）の予定を日付ごとに */
+    /** 表示中のカレンダー（メニューで非表示にしたものを除く）の予定を日付ごとに */
     suspend fun load(context: Context, from: LocalDate, toExclusive: LocalDate): Map<LocalDate, List<EventInstance>>? {
         val c = context.container
         if (!c.repository.hasPermission()) return null
         val zone = ZoneId.systemDefault()
         val hidden = c.prefs.hiddenCalendars.value
-        val acc = c.prefs.accountFilter.value
-        val cals = c.repository.calendars().filter { it.id !in hidden && (acc == null || it.accountName == acc) }.map { it.id }.toSet()
+        val cals = c.repository.calendars().filter { it.id !in hidden }.map { it.id }.toSet()
         val events = c.repository.instances(
             from.atStartOfDay(zone).toInstant().toEpochMilli(), toExclusive.atStartOfDay(zone).toInstant().toEpochMilli()
         ).filter { it.calendarId in cals }

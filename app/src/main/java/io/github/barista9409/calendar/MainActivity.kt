@@ -38,6 +38,7 @@ class MainActivity : ComponentActivity() {
     private val vm: CalendarViewModel by viewModels()
     private var openUpdate by mutableStateOf(false)
     private var openCalendars by mutableStateOf(false)
+    private var openSync by mutableStateOf(false)
     private var openSettings by mutableStateOf(false)
     private var autoFix by mutableStateOf(false)
 
@@ -83,19 +84,26 @@ class MainActivity : ComponentActivity() {
                             io.github.barista9409.calendar.ui.theme.MenuTheme { UpdateScreen(onBack = { openUpdate = false }) }
                         }
                         openCalendars -> {
-                            BackHandler { openCalendars = false; autoFix = false; vm.refresh() }
-                            // メニューから開く画面は、メニューと同じ配色
-                            io.github.barista9409.calendar.ui.theme.MenuTheme { CalendarsScreen(onBack = { openCalendars = false; autoFix = false; vm.refresh() }, autoFix = autoFix) }
+                            BackHandler { openCalendars = false; vm.refresh() }
+                            // メニュー・設定から開く画面は、メニューと同じ配色
+                            io.github.barista9409.calendar.ui.theme.MenuTheme { CalendarsScreen(onBack = { openCalendars = false; vm.refresh() }) }
+                        }
+                        openSync -> {
+                            BackHandler { openSync = false; autoFix = false }
+                            io.github.barista9409.calendar.ui.theme.MenuTheme {
+                                io.github.barista9409.calendar.ui.calendars.SyncScreen(onBack = { openSync = false; autoFix = false }, autoFix = autoFix)
+                            }
                         }
                         openSettings -> {
                             BackHandler { openSettings = false }
                             io.github.barista9409.calendar.ui.theme.MenuTheme {
                                 io.github.barista9409.calendar.ui.settings.SettingsScreen(onBack = { openSettings = false },
-                                    onOpenUpdate = { openSettings = false; openUpdate = true })
+                                    onOpenUpdate = { openUpdate = true },
+                                    onOpenCalendars = { openCalendars = true }, onOpenSync = { openSync = true })
                             }
                         }
-                        else -> CalendarScreen(vm, onOpenUpdate = { openUpdate = true }, onOpenCalendars = { openCalendars = true },
-                            onSetupSync = { autoFix = true; openCalendars = true },
+                        else -> CalendarScreen(vm, onOpenUpdate = { openUpdate = true }, onOpenSync = { openSync = true },
+                            onSetupSync = { autoFix = true; openSync = true },
                             onOpenSettings = { openSettings = true })
                     }
                 }
@@ -119,7 +127,7 @@ class MainActivity : ComponentActivity() {
         val external = intent.hasExtra(EXTRA_DATE) || intent.hasExtra(EXTRA_EVENT_ID) ||
             intent.getBooleanExtra(EXTRA_NEW_EVENT, false) || intent.action == Intent.ACTION_SEND
         if (external) {
-            openCalendars = false; openSettings = false; openUpdate = false
+            openCalendars = false; openSync = false; openSettings = false; openUpdate = false
             vm.requestCloseDrawer()
         }
         if (intent.getBooleanExtra(EXTRA_OPEN_UPDATE, false)) openUpdate = true

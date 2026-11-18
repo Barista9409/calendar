@@ -25,6 +25,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.CheckCircle
@@ -80,64 +81,37 @@ import io.github.barista9409.calendar.google.GoogleSync
 import io.github.barista9409.calendar.model.CalendarInfo
 import io.github.barista9409.calendar.util.ColorUtils
 
-/** カレンダーの管理：表示・非表示、Google 連携（添付ファイル用）、名前・色・共有は Google カレンダーの設定画面へ */
+/**
+ * 設定 →「アカウントとカレンダー」：アカウントの追加・このアプリで使うか・Google 連携（添付用）・カレンダーの追加と詳細。
+ * カレンダーのオン・オフはメニューだけで行う（ここには置かない）。
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CalendarsScreen(onBack: () -> Unit, autoFix: Boolean = false, vm: CalendarsViewModel = viewModel()) {
+fun CalendarsScreen(onBack: () -> Unit, vm: CalendarsViewModel = viewModel()) {
     val calendars by vm.calendars.collectAsStateWithLifecycle()
     val linked by vm.linked.collectAsStateWithLifecycle()
     val busy by vm.busy.collectAsStateWithLifecycle()
-    val hidden by LocalContext.current.container.prefs.hiddenCalendars.collectAsStateWithLifecycle()
     val hiddenAccounts by vm.hiddenAccounts.collectAsStateWithLifecycle()
-    val sync by vm.sync.collectAsStateWithLifecycle()
     val unsynced by vm.unsynced.collectAsStateWithLifecycle()
-    val summary by vm.summary.collectAsStateWithLifecycle()
-    val run by vm.syncRun.collectAsStateWithLifecycle()
-    val askMaster by vm.askMaster.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val snackbar = remember { SnackbarHostState() }
     var open by remember { mutableStateOf<CalendarInfo?>(null) }
-    var trouble by remember { mutableStateOf(false) }
-    var topMenu by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { vm.messages.collect { snackbar.showSnackbar(it) } }
-    // 初回の案内から来たときは、すぐにオンにするか聞く
-    LaunchedEffect(autoFix, summary) { if (autoFix && summary?.kind == SyncSummary.Kind.MASTER_OFF) vm.summaryAction() }
     fun browse(url: String) = runCatching {
         context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url)))
-    }
-    fun openAccountSettings(account: String) {
-        // そのアカウントの「アカウントの同期」画面を直接開く（パスワードなどの画面に迷わないように）
-        val direct = android.content.Intent("android.settings.ACCOUNT_SYNC_SETTINGS")
-            .putExtra("account", android.accounts.Account(account, "com.google"))
-        runCatching { context.startActivity(direct) }.onFailure {
-            runCatching { context.startActivity(android.content.Intent(android.provider.Settings.ACTION_SYNC_SETTINGS)) }
-        }
     }
 
     Scaffold(
         topBar = {
-            TopAppBar(title = { Text("カレンダーと同期") }, navigationIcon = {
+            TopAppBar(title = { Text("アカウントとカレンダー") }, navigationIcon = {
                 IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "戻る") }
-            }, actions = {
-                TextButton(onClick = { context.startActivity(io.github.barista9409.calendar.ui.addAccountIntent()) }) {
-                    Icon(Icons.Outlined.Add, null); Spacer(Modifier.width(4.dp)); Text("アカウント")
-                }
-                Box {
-                    IconButton(onClick = { topMenu = true }) { Icon(Icons.Outlined.MoreVert, contentDescription = "その他") }
-                    DropdownMenu(topMenu, { topMenu = false }) {
-                        DropdownMenuItem(text = { Text("困ったとき（詳しい状態）") }, onClick = { topMenu = false; trouble = true })
-                    }
-                }
             })
         },
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
-            if (busy || run.running) LinearProgressIndicator(Modifier.fillMaxWidth()) else Spacer(Modifier.height(4.dp))
+            if (busy) LinearProgressIndicator(Modifier.fillMaxWidth()) else Spacer(Modifier.height(4.dp))
             LazyColumn(Modifier.fillMaxSize()) {
-                item(key = "summary") {
-                    summary?.let { SummaryCard(it, busy, onAction = vm::summaryAction) }
-                }
                 // 同期していないカレンダーしかないアカウントも出す
                 val groups = calendars.groupBy { it.accountName } + unsynced.map { it.third }.distinct()
                     .filter { a -> calendars.none { it.accountName == a } }.associateWith { emptyList<CalendarInfo>() }
@@ -150,12 +124,14 @@ fun CalendarsScreen(onBack: () -> Unit, autoFix: Boolean = false, vm: CalendarsV
                             onLink = { vm.link(account) }, onUnlink = { vm.unlink(account) },
                             onHide = { vm.setAccountHidden(account, it) },
                             onRemoveFromDevice = {
-                                context.startActivity(android.content.Intent(android.provider.Settings.ACTION_SYNC_SETTINGS))
+                                val i = android.content.Intent("android.settings.ACCOUNT_SYNC_SETTINGS")
+                                    .putExtra("account", android.accounts.Account(account, "com.google"))
+                                runCatching { context.startActivity(i) }.onFailure {
+                                    runCatching { context.startActivity(android.content.Intent(android.provider.Settings.ACTION_SYNC_SETTINGS)) }
+                                }
                             })
                     }
-                    if (!accHidden) items(list, key = { it.id }) { c ->
-                        CalendarRow(c, c.id !in hidden, onToggle = { vm.setVisible(c, it) }, onClick = { open = c })
-                    }
+                    if (!accHidden) items(list, key = { it.id }) { c -> CalendarRow(c, onClick = { open = c }) }
                     if (isGoogle && !accHidden) item(key = "u$account") {
                         AddCalendars(unsynced.filter { it.third == account }, busy,
                             onEnable = { (cid, name, acc) -> vm.enableSync(cid, name, acc) },
@@ -163,7 +139,64 @@ fun CalendarsScreen(onBack: () -> Unit, autoFix: Boolean = false, vm: CalendarsV
                     }
                     item(key = "d$account") { HorizontalDivider(Modifier.padding(vertical = 8.dp)) }
                 }
+                item(key = "add") {
+                    Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                        androidx.compose.material3.Button(onClick = { context.startActivity(io.github.barista9409.calendar.ui.addAccountIntent()) }) {
+                            Icon(Icons.Outlined.Add, null); Spacer(Modifier.width(6.dp)); Text("アカウントを追加")
+                        }
+                        Text("追加したアカウントは、スマホのカレンダー同期が終わると表示されます。", fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))
+                    }
+                }
             }
+        }
+    }
+
+    open?.let { cal ->
+        ModalBottomSheet(onDismissRequest = { open = null }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+            CalendarSettings(cal, onOpenGoogle = { browse(GoogleSync.calendarSettingsUrl(cal)) }, onClose = { open = null })
+        }
+    }
+}
+
+/** 設定 →「同期」：同期の状態のまとめ 1 枚と、困ったとき（詳しい状態） */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SyncScreen(onBack: () -> Unit, autoFix: Boolean = false, vm: CalendarsViewModel = viewModel()) {
+    val busy by vm.busy.collectAsStateWithLifecycle()
+    val hiddenAccounts by vm.hiddenAccounts.collectAsStateWithLifecycle()
+    val sync by vm.sync.collectAsStateWithLifecycle()
+    val summary by vm.summary.collectAsStateWithLifecycle()
+    val askMaster by vm.askMaster.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    val snackbar = remember { SnackbarHostState() }
+    var trouble by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { vm.messages.collect { snackbar.showSnackbar(it) } }
+    // 初回の案内から来たときは、すぐにオンにするか聞く
+    LaunchedEffect(autoFix, summary) { if (autoFix && summary?.kind == SyncSummary.Kind.MASTER_OFF) vm.summaryAction() }
+    fun openAccountSettings(account: String) {
+        // そのアカウントの「アカウントの同期」画面を直接開く（パスワードなどの画面に迷わないように）
+        val direct = android.content.Intent("android.settings.ACCOUNT_SYNC_SETTINGS")
+            .putExtra("account", android.accounts.Account(account, "com.google"))
+        runCatching { context.startActivity(direct) }.onFailure {
+            runCatching { context.startActivity(android.content.Intent(android.provider.Settings.ACTION_SYNC_SETTINGS)) }
+        }
+    }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(title = { Text("同期") }, navigationIcon = {
+                IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "戻る") }
+            })
+        },
+        snackbarHost = { SnackbarHost(snackbar) },
+    ) { padding ->
+        Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState())) {
+            summary?.let { SummaryCard(it, busy, onAction = vm::summaryAction) }
+            Text("予定のやりとりは、スマホの Google の同期機能が自動で行います。このアプリで変えた予定は、まもなく Google に届きます。" +
+                "Google 側の変更は、届きしだい表示されます。",
+                fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
+            TextButton(onClick = { trouble = true }, modifier = Modifier.padding(horizontal = 8.dp)) { Text("困ったとき（詳しい状態）") }
         }
     }
 
@@ -177,12 +210,6 @@ fun CalendarsScreen(onBack: () -> Unit, autoFix: Boolean = false, vm: CalendarsV
 
     if (trouble) TroubleDialog(sync.values.filter { it.account !in hiddenAccounts }, onClose = { trouble = false },
         onOpenSettings = { openAccountSettings(it) })
-
-    open?.let { cal ->
-        ModalBottomSheet(onDismissRequest = { open = null }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
-            CalendarSettings(cal, onOpenGoogle = { browse(GoogleSync.calendarSettingsUrl(cal)) }, onClose = { open = null })
-        }
-    }
 }
 
 /** 一番上のまとめ：同期できているか・同期中か・送信待ちか・送れていないか・自動同期がオフか、だけを出す */
@@ -292,14 +319,15 @@ private fun AccountHeader(
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(account, fontWeight = FontWeight.Bold, color = if (hidden) scheme.onSurfaceVariant else scheme.onSurface)
-                if (hidden) Text("このアプリでは非表示", fontSize = 12.sp, color = scheme.onSurfaceVariant)
+                if (hidden) Text("このアプリでは使わない", fontSize = 12.sp, color = scheme.onSurfaceVariant)
                 else if (isGoogle && linked) Text("Google と連携済み（添付ファイルが使えます）", fontSize = 12.sp, color = scheme.primary)
             }
+            // このアプリで使うか（オフにすると、メニュー・カレンダー・ウィジェットに出ない）
+            Switch(checked = !hidden, onCheckedChange = { onHide(!it) },
+                modifier = Modifier.semantics { contentDescription = "${account}をこのアプリで使う" })
             Box {
                 IconButton(onClick = { menu = true }) { Icon(Icons.Outlined.MoreVert, contentDescription = "アカウントのメニュー") }
                 DropdownMenu(menu, { menu = false }) {
-                    if (hidden) DropdownMenuItem(text = { Text("このアプリで表示する") }, onClick = { menu = false; onHide(false) })
-                    else DropdownMenuItem(text = { Text("このアプリで非表示にする") }, onClick = { menu = false; onHide(true) })
                     if (isGoogle && linked) DropdownMenuItem(text = { Text("Google との連携を解除") }, onClick = { menu = false; onUnlink() })
                     DropdownMenuItem(text = { Text("端末からアカウントを削除…") }, onClick = { menu = false; confirmRemove = true })
                 }
@@ -309,7 +337,7 @@ private fun AccountHeader(
             AlertDialog(
                 onDismissRequest = { confirmRemove = false },
                 title = { Text("端末からアカウントを削除") },
-                text = { Text("アカウントの削除は Android の設定画面で行います。開いた画面で「$account」を選び、「アカウントを削除」を押してください。\nこのアプリで表示しないだけなら「このアプリで非表示にする」を使ってください。") },
+                text = { Text("アカウントの削除は Android の設定画面で行います。開いた画面で「$account」を選び、「アカウントを削除」を押してください。\nこのアプリで使わないだけなら、アカウントの右のスイッチをオフにしてください。") },
                 confirmButton = { TextButton(onClick = { confirmRemove = false; onRemoveFromDevice() }) { Text("設定を開く") } },
                 dismissButton = { TextButton(onClick = { confirmRemove = false }) { Text("キャンセル") } },
             )
@@ -324,7 +352,7 @@ private fun AccountHeader(
 }
 
 @Composable
-private fun CalendarRow(c: CalendarInfo, visible: Boolean, onToggle: (Boolean) -> Unit, onClick: () -> Unit) {
+private fun CalendarRow(c: CalendarInfo, onClick: () -> Unit) {
     val scheme = MaterialTheme.colorScheme
     Row(
         Modifier.fillMaxWidth().heightIn(min = 56.dp).clickable(onClick = onClick).padding(horizontal = 16.dp),
@@ -335,7 +363,8 @@ private fun CalendarRow(c: CalendarInfo, visible: Boolean, onToggle: (Boolean) -
             Text(c.name, fontSize = 15.sp)
             Text(roleText(c), fontSize = 12.sp, color = scheme.onSurfaceVariant)
         }
-        Switch(checked = visible, onCheckedChange = onToggle, modifier = Modifier.semantics { contentDescription = "${c.name}を表示" })
+        // 表示のオン・オフはメニューで。ここは押すと詳細（名前・色・共有は Google カレンダーで）
+        Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, contentDescription = null, tint = scheme.onSurfaceVariant)
     }
 }
 
@@ -366,7 +395,7 @@ private fun CalendarSettings(c: CalendarInfo, onOpenGoogle: () -> Unit, onClose:
         }
         Text("名前・色・共有（誰と共有するか、権限）・削除は、Google カレンダーの設定画面で変更します。", fontSize = 14.sp)
         Button(onClick = onOpenGoogle, modifier = Modifier.fillMaxWidth()) { Text("Google カレンダーで設定を開く") }
-        Text("変更は少しするとこのアプリにも反映されます（反映されないときは、画面の上の［今すぐ同期］）。",
+        Text("変更は少しするとこのアプリにも反映されます（反映されないときは、メニューの「同期」）。",
             fontSize = 12.sp, color = scheme.onSurfaceVariant)
         if (!c.isOwner) Text("共有の設定は、カレンダーのオーナーだけが変更できます。", fontSize = 12.sp, color = scheme.onSurfaceVariant)
         TextButton(onClick = onClose, modifier = Modifier.align(Alignment.End)) { Text("閉じる") }

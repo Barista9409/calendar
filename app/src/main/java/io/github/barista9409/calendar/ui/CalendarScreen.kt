@@ -28,6 +28,8 @@ import androidx.compose.material.icons.outlined.Menu
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.Sync
+import androidx.compose.material.icons.outlined.SyncProblem
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.SystemUpdate
 import androidx.compose.material.icons.outlined.Share
@@ -84,8 +86,8 @@ import kotlinx.coroutines.launch
 import java.time.LocalDate
 
 @Composable
-fun CalendarScreen(vm: CalendarViewModel, onOpenUpdate: () -> Unit, onOpenCalendars: () -> Unit, onOpenSettings: () -> Unit,
-                   onSetupSync: () -> Unit = onOpenCalendars) {
+fun CalendarScreen(vm: CalendarViewModel, onOpenUpdate: () -> Unit, onOpenSync: () -> Unit, onOpenSettings: () -> Unit,
+                   onSetupSync: () -> Unit = onOpenSync) {
     // 初めて開いたとき：予定の通知をどちらで受け取るかを聞く（家族に入れてもらったときに通知が来ない、を防ぐ）
     run {
         val prefs = androidx.compose.ui.platform.LocalContext.current.container.prefs
@@ -148,7 +150,6 @@ fun CalendarScreen(vm: CalendarViewModel, onOpenUpdate: () -> Unit, onOpenCalend
     val sheetSize by vm.sheetSize.collectAsStateWithLifecycle()
     val calendars by vm.calendars.collectAsStateWithLifecycle()
     val hidden by vm.hiddenCalendars.collectAsStateWithLifecycle()
-    val accountFilter by vm.accountFilter.collectAsStateWithLifecycle()
     val writable by vm.writableCalendars.collectAsStateWithLifecycle()
     val attachState by vm.attachState.collectAsStateWithLifecycle()
     val uploading by vm.uploading.collectAsStateWithLifecycle()
@@ -223,13 +224,12 @@ fun CalendarScreen(vm: CalendarViewModel, onOpenUpdate: () -> Unit, onOpenCalend
     ModalNavigationDrawer(
         drawerState = drawer,
         drawerContent = {
-            AppDrawer(calendars, hidden, accountFilter,
-                onAccount = vm::setAccountFilter, onToggle = vm::setCalendarVisible,
-                onRefresh = { vm.syncNow(); scope.launch { drawer.close() } },
+            AppDrawer(calendars, hidden,
+                onToggle = vm::setCalendarVisible, onToggleAccount = vm::setAccountVisible,
+                onSync = { vm.syncNow() },
+                onOpenSync = { scope.launch { drawer.close() }; onOpenSync() },
                 onUpdate = { scope.launch { drawer.close() }; onOpenUpdate() },
-                onCalendars = { scope.launch { drawer.close() }; onOpenCalendars() },
-                onSettings = { scope.launch { drawer.close() }; onOpenSettings() },
-                onAddAccount = { scope.launch { drawer.close() }; context.startActivity(addAccountIntent()) })
+                onSettings = { scope.launch { drawer.close() }; onOpenSettings() })
         },
     ) {
         Scaffold(
@@ -442,42 +442,48 @@ private fun ViewSwitcher(mode: ViewMode, onChange: (ViewMode) -> Unit) {
     }
 }
 
+/**
+ * 左から出るメニュー：「何を見るか」（カレンダーのオン・オフ）と、同期・設定だけ。
+ * アカウントの管理などは設定の「アカウントとカレンダー」にまとめる。
+ */
 @Composable
 private fun AppDrawer(
     calendars: List<CalendarInfo>,
     hidden: Set<Long>,
-    accountFilter: String?,
-    onAccount: (String?) -> Unit,
     onToggle: (Long, Boolean) -> Unit,
-    onRefresh: () -> Unit,
+    onToggleAccount: (String, Boolean) -> Unit,
+    onSync: () -> Unit,
+    onOpenSync: () -> Unit,
     onUpdate: () -> Unit,
-    onCalendars: () -> Unit,
     onSettings: () -> Unit,
-    onAddAccount: () -> Unit,
 ) {
     val scheme = MaterialTheme.colorScheme
+    val context = androidx.compose.ui.platform.LocalContext.current
     val accounts = calendars.map { it.accountName }.distinct()
     io.github.barista9409.calendar.ui.theme.MenuTheme {
     ModalDrawerSheet(drawerContainerColor = MaterialTheme.colorScheme.surface) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(vertical = 16.dp)) {
-            Text("Calendar", fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 20.dp))
-            Text("表示するアカウント", fontSize = 12.sp, color = scheme.onSurfaceVariant,
-                modifier = Modifier.padding(start = 20.dp, top = 12.dp))
-            Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 14.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                AccountAvatar("全", "すべて", accountFilter == null, scheme.primary) { onAccount(null) }
-                accounts.forEachIndexed { i, a ->
-                    AccountAvatar(a.take(1).uppercase(), a.substringBefore('@'), accountFilter == a, avatarColor(i)) { onAccount(a) }
+            Text("Calendar", fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp))
+            accounts.forEach { a ->
+                val list = calendars.filter { it.accountName == a }
+                val shown = list.count { it.id !in hidden }
+                // アカウントの見出し：押すと、そのアカウントのカレンダーをまとめてオン・オフ
+                Row(
+                    Modifier.fillMaxWidth().heightIn(min = 44.dp).clickable { onToggleAccount(a, shown == 0) }
+                        .padding(start = 8.dp, end = 16.dp, top = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    androidx.compose.material3.TriStateCheckbox(
+                        state = when (shown) { 0 -> androidx.compose.ui.state.ToggleableState.Off
+                            list.size -> androidx.compose.ui.state.ToggleableState.On
+                            else -> androidx.compose.ui.state.ToggleableState.Indeterminate },
+                        onClick = { onToggleAccount(a, shown == 0) })
+                    Text(a, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = scheme.onSurfaceVariant, maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                 }
-                AccountAvatar("＋", "追加", false, scheme.outline) { onAddAccount() }
-            }
-            HorizontalDivider(Modifier.padding(horizontal = 16.dp))
-            accounts.filter { accountFilter == null || it == accountFilter }.forEach { a ->
-                Text(a, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = scheme.onSurfaceVariant,
-                    modifier = Modifier.padding(start = 20.dp, top = 12.dp, bottom = 2.dp))
-                calendars.filter { it.accountName == a }.forEach { c ->
+                list.forEach { c ->
                     Row(
-                        Modifier.fillMaxWidth().heightIn(min = 44.dp).clickable { onToggle(c.id, c.id in hidden) }.padding(horizontal = 8.dp),
+                        Modifier.fillMaxWidth().heightIn(min = 44.dp).clickable { onToggle(c.id, c.id in hidden) }.padding(start = 24.dp, end = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Checkbox(checked = c.id !in hidden, onCheckedChange = { onToggle(c.id, it) },
@@ -487,76 +493,57 @@ private fun AppDrawer(
                 }
             }
             if (calendars.isEmpty()) {
-                Text("カレンダーが見つかりません。端末の設定で Google アカウントのカレンダー同期をオンにしてください。",
+                Text("カレンダーが見つかりません。設定 →「アカウントとカレンダー」でアカウントを確認してください。",
                     fontSize = 13.sp, color = scheme.onSurfaceVariant, modifier = Modifier.padding(20.dp))
             }
             HorizontalDivider(Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
-            // スマホの同期がオフなら、ここで知らせる（予定が Google カレンダーと合わない原因）
-            val syncCenter = androidx.compose.ui.platform.LocalContext.current.container.sync
-            var syncOff by remember { mutableStateOf(false) }
+
+            // 同期：1 行だけ。押すと今すぐ同期、同期中は終わるまで「同期しています…」とくるくる（同期中の表示はここだけ）
+            val syncCenter = context.container.sync
+            var problem by remember { mutableStateOf<String?>(null) }
             var lastLine by remember { mutableStateOf("") }
-            var syncTitle by remember { mutableStateOf("") }
             val run by syncCenter.run.collectAsStateWithLifecycle()
             LaunchedEffect(accounts, run.running) {
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                    // 実際に同期できたかで判断する（スマホが返すアカウントごとの設定の値は当てにならない）
                     val sum = io.github.barista9409.calendar.data.SyncSummary.of(syncCenter.facts())
-                    syncOff = sum.isError
-                    syncTitle = sum.title
+                    problem = if (sum.isError) sum.title else null
                     lastLine = io.github.barista9409.calendar.data.lastSyncLine(syncCenter.lastSyncAll())
                 }
             }
-            NavigationDrawerItem(label = {
-                Column {
-                    Text("カレンダーと同期")
-                    if (syncOff) Text("$syncTitle（ここで直せます）", fontSize = 12.sp, color = scheme.error)
-                    Text(if (run.running) "同期しています…" else lastLine, fontSize = 12.sp, color = scheme.onSurfaceVariant)
-                }
-            }, icon = { Icon(Icons.Outlined.Settings, null) },
-                selected = false, onClick = onCalendars, modifier = Modifier.padding(horizontal = 12.dp))
-            NavigationDrawerItem(label = { Text("設定") }, icon = { Icon(Icons.Outlined.Tune, null) },
-                selected = false, onClick = onSettings, modifier = Modifier.padding(horizontal = 12.dp))
-            // 同期中は、メニューを開き直しても終わるまで「同期しています…」とくるくるを出す
             NavigationDrawerItem(
-                label = { Text(if (run.running) "同期しています…" else "今すぐ同期") },
+                label = {
+                    Column {
+                        Text(if (run.running) "同期しています…" else "同期")
+                        when {
+                            run.running -> {}
+                            problem != null -> Text("$problem（押して直す）", fontSize = 12.sp, color = scheme.error)
+                            else -> Text(lastLine, fontSize = 12.sp, color = scheme.onSurfaceVariant)
+                        }
+                    }
+                },
                 icon = {
                     if (run.running) androidx.compose.material3.CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.5.dp)
-                    else Icon(Icons.Outlined.Refresh, null)
+                    else Icon(if (problem != null) Icons.Outlined.SyncProblem else Icons.Outlined.Sync, null,
+                        tint = if (problem != null) scheme.error else scheme.onSurfaceVariant)
                 },
-                selected = false, onClick = { if (!run.running) onRefresh() }, modifier = Modifier.padding(horizontal = 12.dp))
-            NavigationDrawerItem(label = { Text("アップデート") }, icon = { Icon(Icons.Outlined.SystemUpdate, null) },
-                selected = false, onClick = onUpdate, modifier = Modifier.padding(horizontal = 12.dp))
-            var share by remember { mutableStateOf(false) }
-            NavigationDrawerItem(label = { Text("このアプリを共有") }, icon = { Icon(Icons.Outlined.Share, null) },
-                selected = false, onClick = { share = true }, modifier = Modifier.padding(horizontal = 12.dp))
-            if (share) ShareAppDialog(onDismiss = { share = false })
+                selected = false,
+                onClick = { when { run.running -> {}; problem != null -> onOpenSync(); else -> onSync() } },
+                modifier = Modifier.padding(horizontal = 12.dp))
+            NavigationDrawerItem(label = { Text("設定") }, icon = { Icon(Icons.Outlined.Settings, null) },
+                selected = false, onClick = onSettings, modifier = Modifier.padding(horizontal = 12.dp))
+            // 新しい版があるときだけ出す（いつもの入口は 設定 →「このアプリについて」）
+            val update by context.container.updater.state.collectAsStateWithLifecycle()
+            LaunchedEffect(Unit) {
+                if (update is io.github.barista9409.calendar.update.UpdateState.Idle) runCatching { context.container.updater.check() }
+            }
+            if (update is io.github.barista9409.calendar.update.UpdateState.Available) {
+                NavigationDrawerItem(label = { Text("アップデートがあります") }, icon = { Icon(Icons.Outlined.SystemUpdate, null, tint = scheme.primary) },
+                    selected = false, onClick = onUpdate, modifier = Modifier.padding(horizontal = 12.dp))
+            }
         }
     }
     }
 }
-
-private fun avatarColor(i: Int) = listOf(Color(0xFF1E8A5A), Color(0xFF0E7C9E), Color(0xFF7C3AED), Color(0xFFC2410C), Color(0xFF5F6368))[i % 5]
-
-@Composable
-private fun AccountAvatar(initial: String, label: String, selected: Boolean, color: Color, onClick: () -> Unit) {
-    val scheme = MaterialTheme.colorScheme
-    Column(
-        Modifier.width(64.dp).clip(RoundedCornerShape(12.dp)).clickable(onClick = onClick).padding(vertical = 4.dp)
-            .semantics { this.selected = selected },
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Box(
-            Modifier.size(44.dp).clip(CircleShape).background(color)
-                .then(if (selected) Modifier.padding(0.dp) else Modifier),
-            contentAlignment = Alignment.Center,
-        ) { Text(initial, color = Color.White, fontWeight = FontWeight.Bold) }
-        Spacer(Modifier.height(4.dp))
-        Text(label, fontSize = 11.sp, maxLines = 1, color = if (selected) scheme.primary else scheme.onSurfaceVariant,
-            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal)
-        if (selected) Box(Modifier.padding(top = 2.dp).size(width = 20.dp, height = 3.dp).clip(RoundedCornerShape(2.dp)).background(scheme.primary))
-    }
-}
-
 
 /** 端末に Google アカウントを追加する画面 */
 fun addAccountIntent(): android.content.Intent =

@@ -307,7 +307,8 @@ class SyncCenter(private val context: Context) {
         if (running) sawRunning = true
         val elapsed = now - cur.startedAt
         val quiet = now - lastChangeAt >= 2500
-        val pend = pendingEdits().size
+        // 長いあいだ届いていない変更（別の問題）で、同期の完了がいつまでも分からなくならないように、最近の変更だけ見る
+        val pend = pendingEdits().values.count { now - it < SyncSummary.STUCK_MS }
         val changed = lastChangeAt > cur.startedAt || checkRemoteSync()
         val done = SyncProgress.isDone(elapsed, running, sawRunning, changed, quiet, pend)
         val timeout = elapsed >= SyncProgress.TIMEOUT_MS

@@ -88,6 +88,11 @@
             </intent-filter>
         </receiver>
         <!-- カレンダーが変わったらウィジェットを描き直すジョブ -->
+        <!-- ウィジェットの見出しタップの同期（終わるまで待って、くるくるを消す） -->
+        <service
+            android:name=".widget.WidgetSyncJob"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
         <service
             android:name=".widget.WidgetRefreshJob"
             android:exported="false"

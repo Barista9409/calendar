@@ -76,8 +76,8 @@ class DayWidget : GlanceAppWidget() {
         val t = widgetTheme(context)
         val prefs = currentState<Preferences>()
         val tick = prefs[TICK_KEY] ?: 0L
-        // 見出しタップの更新中（念のため 6 秒で消す）
-        val refreshing = (prefs[REFRESHING_KEY] ?: 0L).let { it > 0 && System.currentTimeMillis() - it < 6000 }
+        // 見出しタップの同期中（同期が終わるとジョブが印を消す。念のため 90 秒で出さない）
+        val refreshing = WidgetSyncState.isActive(prefs[REFRESHING_KEY] ?: 0L)
         val today = LocalDate.now()
         val zone = ZoneId.systemDefault()
         val data by produceState<Map<LocalDate, List<EventInstance>>?>(null, tick) {

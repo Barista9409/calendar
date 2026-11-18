@@ -6,6 +6,7 @@ import io.github.barista9409.calendar.ui.CalendarViewModel
 import io.github.barista9409.calendar.ui.calendars.CalendarsViewModel
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -54,19 +55,38 @@ class ScreenStartupTest {
         }
     }
 
-    @Test fun monthWidgetKeepsSpinnerWhileRefreshing() {
-        // 見出しタップの直後に描き直しても、くるくるが消えない（0.7.16 では描き直しで消えて見えなかった）
+    @Test fun monthWidgetShowsSyncingUntilDone() {
+        // 見出しをタップしたら、同期が終わる（印が消える）まで、くるくると「同期しています…」を出し続ける
         val id = 1
-        val store = io.github.barista9409.calendar.widget.MonthWidget.store(app)
-        store.edit().putLong("refresh_$id", System.currentTimeMillis()).commit()
-        val v = io.github.barista9409.calendar.widget.MonthWidget.frame(app, id).apply(app, android.widget.FrameLayout(app))
-        assertEquals(android.view.View.VISIBLE, v.findViewById<android.view.View>(R.id.spinner).visibility)
-        // 読み込みが終わったら（または 6 秒たったら）出さない
-        store.edit().remove("refresh_$id").commit()
-        val v2 = io.github.barista9409.calendar.widget.MonthWidget.frame(app, id).apply(app, android.widget.FrameLayout(app))
-        assertEquals(android.view.View.GONE, v2.findViewById<android.view.View>(R.id.spinner).visibility)
-        store.edit().putLong("refresh_$id", System.currentTimeMillis() - 10_000).commit()
-        val v3 = io.github.barista9409.calendar.widget.MonthWidget.frame(app, id).apply(app, android.widget.FrameLayout(app))
-        assertEquals(android.view.View.GONE, v3.findViewById<android.view.View>(R.id.spinner).visibility)
+        val W = io.github.barista9409.calendar.widget.MonthWidget
+        fun draw() = W.frame(app, id).apply(app, android.widget.FrameLayout(app))
+        fun spinner(v: android.view.View) = v.findViewById<android.view.View>(R.id.spinner).visibility
+        fun title(v: android.view.View) = v.findViewById<android.widget.TextView>(R.id.title).text.toString()
+
+        io.github.barista9409.calendar.widget.WidgetSyncState.startMonth(app, id)
+        val v = draw()
+        assertEquals(android.view.View.VISIBLE, spinner(v))
+        assertEquals("同期しています…", title(v))
+        // 何度描き直しても（同期で届いた変更の描き直しなど）出たまま
+        assertEquals(android.view.View.VISIBLE, spinner(draw()))
+
+        // 同期が終わってジョブが印を消したら、元の見出しに戻る
+        kotlinx.coroutines.runBlocking { io.github.barista9409.calendar.widget.WidgetSyncState.clear(app) }
+        val v2 = draw()
+        assertEquals(android.view.View.GONE, spinner(v2))
+        assertTrue(title(v2).startsWith("本日："))
+
+        // ジョブが止められて印が残っても、90 秒を過ぎたら出さない
+        W.store(app).edit().putLong("refresh_$id", System.currentTimeMillis() - 100_000).commit()
+        assertEquals(android.view.View.GONE, spinner(draw()))
+    }
+
+    @Test fun syncStateExpires() {
+        val S = io.github.barista9409.calendar.widget.WidgetSyncState
+        val now = 1_000_000L
+        assertTrue(S.isActive(now - 1_000, now))
+        assertTrue(S.isActive(now - 80_000, now))
+        org.junit.Assert.assertFalse(S.isActive(now - 91_000, now))
+        org.junit.Assert.assertFalse(S.isActive(0L, now))
     }
 }

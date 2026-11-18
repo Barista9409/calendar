@@ -61,17 +61,13 @@ val TICK_KEY = longPreferencesKey("tick")
 /** 日ウィジェットの見出しタップで更新を始めた時刻（この間は左にくるくる） */
 val REFRESHING_KEY = longPreferencesKey("refreshing_at")
 
-/** 日ウィジェットの見出しタップ：くるくるを出して読み込み直し、Google との同期も頼む */
+/** 日ウィジェットの見出しタップ：「同期中」の印を付けて描き直し、同期をジョブで頼む（終わったらジョブが印を消す） */
 class DayRefreshAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
         val now = System.currentTimeMillis()
         updateAppWidgetState(context, glanceId) { it[REFRESHING_KEY] = now; it[TICK_KEY] = now }
         DayWidget().update(context, glanceId)
-        runCatching { (context.applicationContext as io.github.barista9409.calendar.CalendarApp).container.sync.requestAll() }
-        // 短すぎると気づかないので、少し出してから消す（同期で届いた変更は、あとで自動で描き直される）
-        kotlinx.coroutines.delay(1500)
-        updateAppWidgetState(context, glanceId) { it.remove(REFRESHING_KEY); it[TICK_KEY] = System.currentTimeMillis() }
-        DayWidget().update(context, glanceId)
+        WidgetSyncJob.start(context)
     }
 }
 
@@ -245,7 +241,7 @@ fun CenteredHeader(context: Context, t: WTheme, title: String, refreshing: Boole
             if (refreshing) androidx.glance.appwidget.CircularProgressIndicator(GlanceModifier.size(22.dp), color = t.primary)
         }
         // 見出しをタップすると更新（月ウィジェットと同じ）
-        Text(title, GlanceModifier.defaultWeight().clickable(actionRunCallback<DayRefreshAction>()),
+        Text(if (refreshing) MonthWidget.SYNCING_TITLE else title, GlanceModifier.defaultWeight().clickable(actionRunCallback<DayRefreshAction>()),
             style = TextStyle(color = t.text, fontSize = 15.sp, fontWeight = FontWeight.Bold,
                 textAlign = androidx.glance.text.TextAlign.Center), maxLines = 1)
         IconButton(t, io.github.barista9409.calendar.R.drawable.ic_w_add, "予定を追加", newEventAction(context), filled = true)

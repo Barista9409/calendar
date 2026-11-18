@@ -67,17 +67,15 @@ class MonthWidgetReceiver : AppWidgetProvider() {
         if (intent.action == MonthWidget.ACTION_REFRESH) {
             val id = intent.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID)
             if (id != AppWidgetManager.INVALID_APPWIDGET_ID) {
-                // 見出しをタップ：今月に戻して読み込み直す（読み込み終わるまで左にくるくる）
-                MonthWidget.store(context).edit().putInt("offset_$id", 0)
-                    .putLong("refresh_$id", System.currentTimeMillis()).apply()
+                // 見出しをタップ：今月に戻し、「同期中」の印を付けて描き直す（くるくると「同期しています…」）。
+                // 同期はジョブで頼み、終わるまで待ってから印を消して描き直す
+                MonthWidget.store(context).edit().putInt("offset_$id", 0).commit()
+                WidgetSyncState.startMonth(context, id)
                 val pending = goAsync()
-                MonthWidget.showSpinner(context, id, true)
-                // Google からの最新の予定も取りにいく（届けば自動で表示が変わる）
-                Thread { runCatching { (context.applicationContext as io.github.barista9409.calendar.CalendarApp).container.sync.requestAll() } }.start()
                 MonthWidget.update(context, id, scroll = true)
                 AppWidgetManager.getInstance(context).notifyAppWidgetViewDataChanged(id, R.id.list)
-                // 念のため、読み込みの知らせが来なくても 6 秒でくるくるを消す
-                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({ MonthWidget.showSpinner(context, id, false) }, 6000)
+                WidgetSyncJob.start(context)
+                // スクロールが終わるまで待つ
                 android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({ pending.finish() }, 7000)
             }
             return
@@ -116,13 +114,6 @@ private class MonthWeekFactory(private val context: Context, private val id: Int
             Binder.restoreCallingIdentity(token)
         }
         if (first) { first = false; MonthWidget.scrollToAnchor(context, id, initial = true) }
-        // 見出しタップの更新なら、読み込み終わったらくるくるを消す（短すぎると気づかないので最低 1.2 秒は出す）
-        val began = MonthWidget.store(context).getLong("refresh_$id", 0L)
-        if (began > 0L) {
-            MonthWidget.store(context).edit().remove("refresh_$id").apply()
-            val wait = (1200L - (System.currentTimeMillis() - began)).coerceAtLeast(0L)
-            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({ MonthWidget.showSpinner(context, id, false) }, wait)
-        }
     }
 
     override fun getCount() = count
@@ -142,6 +133,8 @@ private class MonthWeekFactory(private val context: Context, private val id: Int
 
 object MonthWidget {
     const val ACTION_NAV = "io.github.barista9409.calendar.MONTH_WIDGET_NAV"
+    /** 同期中の見出し */
+    const val SYNCING_TITLE = "同期しています…"
     const val ACTION_REFRESH = "io.github.barista9409.calendar.MONTH_WIDGET_REFRESH"
     /** 表示する月の数（今月から。過去は出さない：少ないほど読み込みが軽い） */
     const val MONTHS = 3L
@@ -211,16 +204,6 @@ object MonthWidget {
         AppWidgetManager.getInstance(context).getAppWidgetIds(ComponentName(context, MonthWidgetReceiver::class.java))
 
     /** 設定やカレンダーが変わったとき：すべての月ウィジェットを描き直す */
-    /** 見出しの左のくるくる（更新中の目印）を出す・消す */
-    fun showSpinner(context: Context, id: Int, on: Boolean) {
-        runCatching {
-            AppWidgetManager.getInstance(context).partiallyUpdateAppWidget(id,
-                RemoteViews(context.packageName, R.layout.widget_month).apply {
-                    setViewVisibility(R.id.spinner, if (on) android.view.View.VISIBLE else android.view.View.GONE)
-                })
-        }
-    }
-
     fun updateAll(context: Context) {
         val ids = allIds(context)
         ids.forEach { update(context, it, scroll = false) }
@@ -297,16 +280,15 @@ object MonthWidget {
         val rv = RemoteViews(context.packageName, R.layout.widget_month)
         rv.setInt(R.id.bg, "setColorFilter", c.bg or (0xFF shl 24))
         rv.setInt(R.id.bg, "setImageAlpha", android.graphics.Color.alpha(c.bg))
-        rv.setTextViewText(R.id.title, title(LocalDate.now(), narrow = sizeDp(context, id).first < 300f))
+        // 同期中は、見出しの左にくるくる、見出しは「同期しています…」（同期が終わるまで）
+        val syncing = WidgetSyncState.isActive(WidgetSyncState.monthStartedAt(context, id))
+        rv.setTextViewText(R.id.title, if (syncing) SYNCING_TITLE else title(LocalDate.now(), narrow = sizeDp(context, id).first < 300f))
+        rv.setViewVisibility(R.id.spinner, if (syncing) android.view.View.VISIBLE else android.view.View.GONE)
         rv.setOnClickPendingIntent(R.id.title, PendingIntent.getBroadcast(context, id * 10 + 7,
             Intent(context, MonthWidgetReceiver::class.java).setAction(ACTION_REFRESH)
                 .putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, id).setData(Uri.parse("calendar://monthwidget/$id/refresh")),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
-        rv.setContentDescription(R.id.title, "今日に戻って更新")
-        // 見出しタップの更新中は、描き直してもくるくるを出したままにする（6 秒たったら出さない）
-        val began = store(context).getLong("refresh_$id", 0L)
-        rv.setViewVisibility(R.id.spinner,
-            if (began > 0 && System.currentTimeMillis() - began < 6000) android.view.View.VISIBLE else android.view.View.GONE)
+        rv.setContentDescription(R.id.title, if (syncing) SYNCING_TITLE else "今日に戻って同期")
         rv.setTextColor(R.id.title, c.text)
         rv.setInt(R.id.btn_add_bg, "setColorFilter", c.primary)
         rv.setInt(R.id.btn_add_ic, "setColorFilter", c.onPrimary)

@@ -57,9 +57,10 @@
 | 49 | 下に引っぱって同期 | 目視：カレンダーの一番上で下に引っぱると今すぐ同期（PullToRefreshBox）、終わると「同期が完了しました」 |
 | 50 | Google にまだ届いていない予定が分からない | 自動：SyncStatusTest.pendingUploadMark。目視：「↑」はこのアプリで変えてまだ届いていない予定だけ（SyncCenter.pendingEdits。DIRTY が 0 になる・行が消えると外れる） |
 | 51 | Google 側の変更が同期で届いてもウィジェットが変わらない（アプリを開くまで古いまま） | 目視：WidgetRefreshJob（CalendarContract.CONTENT_URI の変更で動くジョブ、2〜10 秒でまとめて描き直し、動くたびに予約し直し）。CalendarApp.onCreate で予約、manifest に BIND_JOB_SERVICE のサービス |
-| 52 | ウィジェットの更新が始まったか分からない | 目視：月ウィジェットの見出しタップで左にくるくる（最低 1.2 秒、読み込み後に消える、6 秒で必ず消える） |
+| 52 | ウィジェットの更新が始まったか分からない | 自動：ScreenStartupTest.monthWidgetShowsSyncingUntilDone。目視：見出しタップで左にくるくる＋見出しが「同期しています…」、同期が終わるまで出たまま（WidgetSyncJob が終わるのを待って印を消す、印は 90 秒で無効） |
 | 53 | 実際は同期できているのに「同期が止まっています」と出る（スマホがアカウントごとの設定を正しく返さない） | 自動：SyncStatusTest.summaryJudgesByResultsNotSettings。目視：判断は「スマホ全体の自動同期」「このアプリで変えた予定が届いたか（15 分で送れていない扱い）」「同期用の欄（CAL_SYNC1〜10）が変わったか＝最後の同期」だけ。WidgetRefreshJob とアプリ起動時にも checkRemoteSync |
 | 54 | 「カレンダーと同期」を開くとアプリが落ちる（ViewModel の起動処理が、まだ用意していない状態を使っていた） | 自動：ScreenStartupTest（ViewModel を実際に作る）、ScreenRenderTest（カレンダーと同期・設定・メイン画面を実際に描く）。目視：ViewModel の init はクラスの最後に置く |
-| 55 | 月ウィジェットの見出しタップでくるくるが出ない（直後の描き直しで消えていた） | 自動：ScreenStartupTest.monthWidgetKeepsSpinnerWhileRefreshing |
-| 56 | 日ウィジェットの見出しタップでアプリが開き、更新されたか分からない | 目視：日ウィジェットの見出しタップは DayRefreshAction（左にくるくる約 1.5 秒、読み込み直し、同期を依頼）。アプリは開かない |
+| 55 | 月ウィジェットの見出しタップでくるくるが出ない（直後の描き直しで消えていた） | 自動：ScreenStartupTest.monthWidgetShowsSyncingUntilDone（何度描き直しても出たまま。部分更新で出し消しせず、描くたびに印を見る） |
+| 56 | 日ウィジェットの見出しタップでアプリが開き、更新されたか分からない | 目視：日ウィジェットの見出しタップは DayRefreshAction（印を付けて描き直し、WidgetSyncJob で同期。終わるまでくるくる＋「同期しています…」）。アプリは開かない |
+| 57 | ウィジェットのくるくるがすぐ消える・同期の完了まで出ない | 自動：ScreenStartupTest.syncStateExpires。目視：WidgetSyncJob（急ぎのジョブ）が同期の開始と終了を待ち、終わったら WidgetSyncState.clear と描き直し。止められたときも印を消す |
 作業環境のビルドと単体テストが成功し、上の目視項目を確認してからリリースする。

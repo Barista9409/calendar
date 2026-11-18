@@ -29,6 +29,8 @@ class CalendarApp : Application() {
         UpdateWorker.schedule(this)
         // 同期の開始・終了を見守る（最後に同期した時刻の表示に使う）
         container.sync.startWatching()
+        // カレンダーが変わったら（同期で届いた変更も）ウィジェットを描き直す
+        io.github.barista9409.calendar.widget.WidgetRefreshJob.schedule(this)
     }
 }
 

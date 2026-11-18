@@ -67,13 +67,17 @@ class MonthWidgetReceiver : AppWidgetProvider() {
         if (intent.action == MonthWidget.ACTION_REFRESH) {
             val id = intent.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID)
             if (id != AppWidgetManager.INVALID_APPWIDGET_ID) {
-                // 見出しをタップ：今月に戻して読み込み直す
-                MonthWidget.store(context).edit().putInt("offset_$id", 0).apply()
+                // 見出しをタップ：今月に戻して読み込み直す（読み込み終わるまで左にくるくる）
+                MonthWidget.store(context).edit().putInt("offset_$id", 0)
+                    .putLong("refresh_$id", System.currentTimeMillis()).apply()
                 val pending = goAsync()
+                MonthWidget.showSpinner(context, id, true)
                 // Google からの最新の予定も取りにいく（届けば自動で表示が変わる）
                 Thread { runCatching { (context.applicationContext as io.github.barista9409.calendar.CalendarApp).container.sync.requestAll() } }.start()
                 MonthWidget.update(context, id, scroll = true)
                 AppWidgetManager.getInstance(context).notifyAppWidgetViewDataChanged(id, R.id.list)
+                // 念のため、読み込みの知らせが来なくても 6 秒でくるくるを消す
+                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({ MonthWidget.showSpinner(context, id, false) }, 6000)
                 android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({ pending.finish() }, 7000)
             }
             return
@@ -112,6 +116,13 @@ private class MonthWeekFactory(private val context: Context, private val id: Int
             Binder.restoreCallingIdentity(token)
         }
         if (first) { first = false; MonthWidget.scrollToAnchor(context, id, initial = true) }
+        // 見出しタップの更新なら、読み込み終わったらくるくるを消す（短すぎると気づかないので最低 1.2 秒は出す）
+        val began = MonthWidget.store(context).getLong("refresh_$id", 0L)
+        if (began > 0L) {
+            MonthWidget.store(context).edit().remove("refresh_$id").apply()
+            val wait = (1200L - (System.currentTimeMillis() - began)).coerceAtLeast(0L)
+            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({ MonthWidget.showSpinner(context, id, false) }, wait)
+        }
     }
 
     override fun getCount() = count
@@ -200,6 +211,16 @@ object MonthWidget {
         AppWidgetManager.getInstance(context).getAppWidgetIds(ComponentName(context, MonthWidgetReceiver::class.java))
 
     /** 設定やカレンダーが変わったとき：すべての月ウィジェットを描き直す */
+    /** 見出しの左のくるくる（更新中の目印）を出す・消す */
+    fun showSpinner(context: Context, id: Int, on: Boolean) {
+        runCatching {
+            AppWidgetManager.getInstance(context).partiallyUpdateAppWidget(id,
+                RemoteViews(context.packageName, R.layout.widget_month).apply {
+                    setViewVisibility(R.id.spinner, if (on) android.view.View.VISIBLE else android.view.View.GONE)
+                })
+        }
+    }
+
     fun updateAll(context: Context) {
         val ids = allIds(context)
         ids.forEach { update(context, it, scroll = false) }

@@ -87,6 +87,11 @@
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>
+        <!-- カレンダーが変わったらウィジェットを描き直すジョブ -->
+        <service
+            android:name=".widget.WidgetRefreshJob"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
         <service
             android:name=".widget.MonthWidgetService"
             android:exported="false"

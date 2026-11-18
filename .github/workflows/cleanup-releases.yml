@@ -1,0 +1,42 @@
+# 古いリリースを一括で削除する（手動で実行）
+# Actions → 「古いリリースを削除」→ Run workflow。指定したバージョン以前のリリースと、その APK・タグを消す。
+# アプリの更新は最新版しか見ないので、消しても更新には影響しない。
+name: 古いリリースを削除
+
+on:
+  workflow_dispatch:
+    inputs:
+      up_to:
+        description: "このバージョン以前を削除（例: 0.7.14）"
+        required: true
+        default: "0.7.14"
+
+permissions:
+  contents: read
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      RELEASES_REPO: barista9409/calendar-releases
+      UP_TO: ${{ inputs.up_to }}
+    steps:
+      - name: Delete old releases
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_REPO_TOKEN }}
+        run: |
+          set -euo pipefail
+          code() { IFS=. read -r a b c <<< "${1#v}"; echo $((a * 10000 + b * 100 + c)); }
+          limit=$(code "$UP_TO")
+          latest=$(gh api "repos/$RELEASES_REPO/releases/latest" --jq .tag_name)
+          echo "最新版：$latest（これは消さない）"
+          gh api "repos/$RELEASES_REPO/releases?per_page=100" --paginate --jq '.[].tag_name' | while read -r tag; do
+            [ "$tag" = "$latest" ] && continue
+            if [ "$(code "$tag")" -le "$limit" ]; then
+              echo "削除：$tag"
+              gh release delete "$tag" --repo "$RELEASES_REPO" --yes --cleanup-tag
+            fi
+          done
+          echo "残っているリリース："
+          gh api "repos/$RELEASES_REPO/releases?per_page=100" --jq '.[].tag_name'

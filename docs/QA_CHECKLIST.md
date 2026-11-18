@@ -12,14 +12,14 @@
 | 5 | 複数日の予定が帯でつながらない | 自動：MonthWidgetRenderTest.multiDayEventIsOneChipSpanningDays |
 | 6 | 右端の列（土曜）が切れる・文字が引き伸ばされる | 目視：幅を dp で計算せず、weight（7 等分）で並べていること。ビットマップで文字を描いていないこと |
 | 7 | ウィジェットを広げても表示件数が増えない | 目視：MonthWidget.spec が OPTION_APPWIDGET_SIZES から高さを取り、文字サイズ設定から行数を計算していること |
-| 8 | 月ウィジェットの上下スクロールが短い | 目視：listWeeks が前後 12 か月 |
+| 8 | 月ウィジェットの上下スクロール（範囲は 35 で「今月から 3 か月」に変更） | 自動：SyncStatusTest.monthWidgetShowsThisMonthAndTwoMore |
 | 9 | 月の変わり目が分からない | 自動：MonthWidgetRenderTest.firstOfMonthShowsMonth |
 | 10 | 予定詳細で日付が二重に出る | 自動：EventDateLineTest |
 | 11 | 添付画像のプレビューが小さい・出ない | 目視：AttachmentsSection で画像・PDF は大きなカードで表示 |
 | 12 | 詳細シートを閉じるボタンがない | 目視：SheetPanel の右上に × |
 | 13 | ウィジェット選択画面のプレビュー画像がない | 目視：res/xml/widget_*.xml に previewImage |
 | 14 | アプリの月表示：シートを開くと行が縮み、空きがあるのに「+N」 | 自動：MonthViewSizeTest。目視：MonthView の行の高さが表示領域ではなく最大の高さから決まること |
-| 15 | 同じ共有カレンダーを複数アカウントで登録していると、開くたびにカレンダー名と予定の色が入れ替わる | 自動：ApiCalendarPrefsTest。目視：Google 側の表示名・色はキー「アカウント|カレンダー ID」で保存・参照していること |
+| 15 | 同じ共有カレンダーを複数アカウントで登録していると、開くたびにカレンダー名と予定の色が入れ替わる | 目視：カレンダー名と色は端末のカレンダー（アカウントごとの行）からだけ読む。Google の API で取った名前・色で上書きしない（その仕組みは削除済み） |
 | 16 | アプリの月表示とウィジェットで予定の色の付き方・並び方が違う | 自動：MonthWeekItemsTest。目視：アプリの MonthView とウィジェットがどちらも MonthLayout.weekItems / lanes / fit を使い、すべて塗りつぶしの帯で描いていること |
 | 17 | 色の設定：選んだ色が残らない（黒が「標準」扱いになる）・意味の分からない丸・色が多すぎる | 自動：SettingsColorsTest。目視：色は名前つき 8 色＋「ほかの色」、選択中は枠・チェック・太字。明るさは言葉で選ぶ。ウィジェットの設定はアプリの色と分かれている |
 | 18 | 月ウィジェットで 1 日の最大件数を指定できない | 自動：MonthLayoutTest.fixedMaxShowsUpToMaxAndDotsForTheRest / rowHeightGrowsWithMax。目視：ウィジェットの見た目に「自動・2〜6件」 |
@@ -34,9 +34,9 @@
 | 27 | Google の審査・テストユーザー登録が必要（制限付き・機密の権限を使っていた） | 自動：AttachmentServiceTest（権限は drive.file だけ／説明への添付リンクの追加・削除・編集で消えない）。目視：CalendarApi を使っていない、カレンダー管理に「Google カレンダーで設定を開く」 |
 | 28 | 予定の入力画面で添付できない | 自動：AttachmentServiceTest.editingKeepsAttachments。目視：入力画面に「ファイルを添付」（複数選択・×で外せる・添付済みの表示）、保存後に uploadPending でアップロード |
 | 29 | 月ウィジェットの見出しと表示がずれる | 自動：SyncStatusTest.widgetTitleIsTodayNotTheScrolledMonth（見出しは今日の日付）。目視：［‹］［›］・見出しタップで goAsync してスクロールを待つ |
-| 30 | Google カレンダーにある予定が出ない・同期の状態が分からない | 自動：SyncStatusTest。目視：カレンダー管理に同期の状態・「スマホに同期していないカレンダー」と［同期する］、メニューに同期オフの警告、manifest に READ_SYNC_SETTINGS / READ_SYNC_STATS |
+| 30 | Google カレンダーにある予定が出ない・同期の状態が分からない | 自動：SyncStatusTest。目視：「カレンダーと同期」の一番上のまとめ、「＋ ほかのカレンダーを追加」と［追加］、メニューに同期オフの警告、manifest に READ_SYNC_SETTINGS / READ_SYNC_STATS / WRITE_SYNC_SETTINGS |
 | 31 | 月ウィジェットの見出し・ボタンが分かりにくい、スクロール中に何月か分からない | 自動：MonthWidgetRenderTest.railShowsMonthOfTheWeek / firstOfMonthShowsMonth、SyncStatusTest（「本日：…」）。目視：見出しは中央の「本日：…」（タップで今日へ）と右の＋だけ、左に月の列、曜日 13sp 太字、偶数月の塗り分け、日ウィジェットも「本日：…」中央 |
-| 32 | 同期オフの［設定を開く］でパスワードの画面に飛び、何をすればいいか分からない | 目視：［同期をオンにする］が ACCOUNT_SYNC_SETTINGS（account 付き）でそのアカウントの同期画面を開く。文言に「Google カレンダーをオン」 |
+| 32 | 同期オフの［設定を開く］でパスワードの画面に飛び、何をすればいいか分からない | 目視：［直す］はアプリ内で設定する。「困ったとき」の［スマホの同期の設定を開く］は ACCOUNT_SYNC_SETTINGS（account 付き）でそのアカウントの同期画面を開く |
 | 33 | 実際は同期オンなのに「カレンダー同期がオフ」と赤く警告される | 自動：SyncStatusTest.unreliableReadingIsNotShownAsError（アプリからオンにしても読み取りがオフのままなら「不正確」として警告しない）。目視：［自動同期をオンにする］の後に読み取りがオフのままなら案内に切り替わる |
 | 34 | 同期の状態がちゃんと分からない・同期が確実に動かない | 自動：SyncStatusTest（fix の判定・「最後の同期」の表示・未送信件数）。目視：manifest に WRITE_SYNC_SETTINGS、カレンダー管理に「最後の同期」「詳しく」（生の値）・［今すぐ同期］（MANUAL+EXPEDITED、自動同期オフでも動く）・［自動同期をオンにする］（アプリ内で setSyncAutomatically / setMasterSyncAutomatically）。CalendarRepository の全書き込み（追加・変更・時刻変更・この回のみ・すべて・これ以降・削除）と添付の説明更新の後に sync.localChanged()（UPLOAD を依頼）。アプリを開いたとき requestIfStale、メニュー「今すぐ同期」、月ウィジェットの見出しタップでも同期を依頼 |
 
@@ -50,7 +50,7 @@
 | 42 | 今日ボタンを中央、検索を右上に | 目視：上のバーは左にメニューと年月（入りきらないと文字を小さく）、中央に［今日］、右上に検索 |
 | 43 | 添付ファイルがどの予定のものか分からない | 自動：AttachmentServiceTest.driveFileNameHasDateAndTitle（「日付_予定名_元の名前」）。目視：詳細からの添付・入力画面からの添付の両方で付く |
 | 44 | 予定を消したときの添付ファイルの扱い | 目視：単発・「すべて」の削除で添付があれば「添付ファイルも削除しますか？」（［ファイルは残す］／［ファイルも削除］、外側タップでやめる）。「元に戻す」なら消さない。「この予定のみ」「これ以降」では聞かない |
-| 45 | メニューに最終同期日時が無い | 目視：メニューの「カレンダーと Google 連携」の下に「最後の同期：…」、同期中は「同期しています…」 |
+| 45 | メニューに最終同期日時が無い | 目視：メニューの「カレンダーと同期」の下に「最後の同期：…」、同期中は「同期しています…」 |
 | 46 | 同期画面がややこしい | 自動：SyncStatusTest.summaryShowsOnlyOneState。目視：一番上に 1 枚だけ（最新です／同期しています…／送信待ち N 件／同期が止まっています［直す］／確認できません［直す］）。アカウントの見出しには問題があるときだけ一言。細かい値は ︙ →「困ったとき（詳しい状態）」。同期していないカレンダーは「＋ ほかのカレンダーを追加」 |
 | 47 | ［直す］で全部まとめて直す | 目視：全体の自動同期オフなら確認ダイアログ → 見えないアカウントは標準のアカウント選択を順に → 見えるアカウントはカレンダー同期オン → 同期。直せなかったアカウントを知らせる |
 | 48 | 初回に同期の準備を案内 | 目視：通知の質問のあと、準備が要るアカウントがあれば「Google カレンダーと同期する準備」（［準備する］でカレンダーと同期の画面を開き［直す］を自動で実行、［あとで］）。1 回だけ |

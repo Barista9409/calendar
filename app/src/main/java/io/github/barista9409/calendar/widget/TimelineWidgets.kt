@@ -76,6 +76,8 @@ class DayWidget : GlanceAppWidget() {
         val t = widgetTheme(context)
         val prefs = currentState<Preferences>()
         val tick = prefs[TICK_KEY] ?: 0L
+        // 見出しタップの更新中（念のため 6 秒で消す）
+        val refreshing = (prefs[REFRESHING_KEY] ?: 0L).let { it > 0 && System.currentTimeMillis() - it < 6000 }
         val today = LocalDate.now()
         val zone = ZoneId.systemDefault()
         val data by produceState<Map<LocalDate, List<EventInstance>>?>(null, tick) {
@@ -89,7 +91,7 @@ class DayWidget : GlanceAppWidget() {
         }
 
         Column(GlanceModifier.fillMaxSize().background(t.bg).cornerRadius(20.dp).padding(horizontal = 8.dp, vertical = 8.dp)) {
-            CenteredHeader(context, t, MonthWidget.title(today, narrow = LocalSize.current.width < 300.dp))
+            CenteredHeader(context, t, MonthWidget.title(today, narrow = LocalSize.current.width < 300.dp), refreshing)
             LazyColumn(GlanceModifier.fillMaxSize()) {
                 items(days, itemId = { it.first.toEpochDay() }) { (day, list) ->
                     DayRow(context, t, day, day == today, list, zone)

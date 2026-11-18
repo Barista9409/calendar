@@ -175,14 +175,6 @@ class CalendarViewModel(app: Application) : AndroidViewModel(app) {
             map.mapValues { (_, v) -> v.sortedWith(compareByDescending<EventInstance> { it.isLong }.thenBy { it.begin }.thenBy { it.title }) }
         }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
 
-    init {
-        refresh()
-        @OptIn(FlowPreview::class)
-        viewModelScope.launch { repo.changes().debounce(400).collect { refresh() } }
-        @OptIn(FlowPreview::class)
-        viewModelScope.launch { prefs.hiddenAccounts.debounce(200).collect { refresh(); WidgetUpdater.updateAllAsync(getApplication()) } }
-    }
-
     fun calendarById(id: Long): CalendarInfo? = _calendars.value.firstOrNull { it.id == id }
 
     /** Google と今すぐ同期して再表示（自動同期がオフでも 1 回は同期される） */
@@ -616,5 +608,14 @@ class CalendarViewModel(app: Application) : AndroidViewModel(app) {
                 pending.value = pending.value - token
             }
         }
+    }
+
+    // 起動時の処理は、すべての状態を用意した後（クラスの最後）に置く。順番を間違えると開いた瞬間に落ちる
+    init {
+        refresh()
+        @OptIn(FlowPreview::class)
+        viewModelScope.launch { repo.changes().debounce(400).collect { refresh() } }
+        @OptIn(FlowPreview::class)
+        viewModelScope.launch { prefs.hiddenAccounts.debounce(200).collect { refresh(); WidgetUpdater.updateAllAsync(getApplication()) } }
     }
 }

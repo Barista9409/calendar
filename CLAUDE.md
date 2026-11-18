@@ -9,6 +9,8 @@
 - 作業環境で `./gradlew assembleDebug testDebugUnitTest` が成功してからリリースする（リリースの workflow でも単体テストとビルドが走る）。失敗したままリリースしない。
 - GitHub の Android CI は push では動かさない（Actions の使用量を抑えるため。必要なときだけ手動で実行）。
 - 新しく不具合を指摘されたら、直すときに再発防止のテストかチェック項目を `docs/QA_CHECKLIST.md` に追加する。
+- 画面を足したり変えたりしたら、その画面を実際に描くテスト（ScreenRenderTest）と ViewModel を作るテスト（ScreenStartupTest）を足す。単体の計算だけのテストで済ませない。
+- ViewModel の `init` はクラスの最後に置く（状態を宣言する前に使うと、開いた瞬間に落ちる）。
 
 ## リリース手順
 - `release.yml` を workflow_dispatch（入力：version, notes）で実行する。versionCode は major*10000+minor*100+patch。

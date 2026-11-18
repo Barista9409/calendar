@@ -58,6 +58,22 @@ import androidx.glance.color.ColorProvider as DayNight
 import androidx.glance.unit.ColorProvider as Fixed
 
 val TICK_KEY = longPreferencesKey("tick")
+/** 日ウィジェットの見出しタップで更新を始めた時刻（この間は左にくるくる） */
+val REFRESHING_KEY = longPreferencesKey("refreshing_at")
+
+/** 日ウィジェットの見出しタップ：くるくるを出して読み込み直し、Google との同期も頼む */
+class DayRefreshAction : ActionCallback {
+    override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
+        val now = System.currentTimeMillis()
+        updateAppWidgetState(context, glanceId) { it[REFRESHING_KEY] = now; it[TICK_KEY] = now }
+        DayWidget().update(context, glanceId)
+        runCatching { (context.applicationContext as io.github.barista9409.calendar.CalendarApp).container.sync.requestAll() }
+        // 短すぎると気づかないので、少し出してから消す（同期で届いた変更は、あとで自動で描き直される）
+        kotlinx.coroutines.delay(1500)
+        updateAppWidgetState(context, glanceId) { it.remove(REFRESHING_KEY); it[TICK_KEY] = System.currentTimeMillis() }
+        DayWidget().update(context, glanceId)
+    }
+}
 
 /** 予定の色の上に載せる文字色（明るい色には濃い文字） */
 fun onEventColor(argb: Int) = Fixed(ColorUtils.onColor(argb))
@@ -222,10 +238,14 @@ class CalendarChangedReceiver : BroadcastReceiver() {
 
 /** 見出し（真ん中）：「本日：…」と右端の＋。日ウィジェット用 */
 @Composable
-fun CenteredHeader(context: Context, t: WTheme, title: String) {
+fun CenteredHeader(context: Context, t: WTheme, title: String, refreshing: Boolean = false) {
     Row(GlanceModifier.fillMaxWidth().height(48.dp), verticalAlignment = Alignment.CenterVertically) {
-        Spacer(GlanceModifier.width(44.dp))
-        Text(title, GlanceModifier.defaultWeight().clickable(openDateAction(context, java.time.LocalDate.now())),
+        // 左：更新中だけくるくる（＋と同じ幅で、見出しを真ん中にそろえる）
+        Box(GlanceModifier.size(44.dp), contentAlignment = Alignment.Center) {
+            if (refreshing) androidx.glance.appwidget.CircularProgressIndicator(GlanceModifier.size(22.dp), color = t.primary)
+        }
+        // 見出しをタップすると更新（月ウィジェットと同じ）
+        Text(title, GlanceModifier.defaultWeight().clickable(actionRunCallback<DayRefreshAction>()),
             style = TextStyle(color = t.text, fontSize = 15.sp, fontWeight = FontWeight.Bold,
                 textAlign = androidx.glance.text.TextAlign.Center), maxLines = 1)
         IconButton(t, io.github.barista9409.calendar.R.drawable.ic_w_add, "予定を追加", newEventAction(context), filled = true)

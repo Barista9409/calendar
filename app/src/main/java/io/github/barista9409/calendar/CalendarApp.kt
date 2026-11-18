@@ -26,7 +26,8 @@ class CalendarApp : Application() {
     override fun onCreate() {
         super.onCreate()
         container = AppContainer(this)
-        UpdateWorker.schedule(this)
+        // 更新の確認の予約（失敗してもアプリは起動させる）
+        runCatching { UpdateWorker.schedule(this) }
         // 同期の開始・終了を見守る（最後に同期した時刻の表示に使う）
         container.sync.startWatching()
         // カレンダーが変わったら（同期で届いた変更も）ウィジェットを描き直す

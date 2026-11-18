@@ -41,15 +41,24 @@ class CalendarsViewModel(app: Application) : AndroidViewModel(app) {
     private val _sync = MutableStateFlow<Map<String, io.github.barista9409.calendar.data.SyncStatus>>(emptyMap())
     val sync: StateFlow<Map<String, io.github.barista9409.calendar.data.SyncStatus>> = _sync.asStateFlow()
 
-    init {
-        reload()
-        viewModelScope.launch {
-            while (true) { readSync(); kotlinx.coroutines.delay(3000) }
-        }
-    }
-
     /** 実際に起きたこと（画面の判断はこれだけで行う） */
     private val _facts = MutableStateFlow<SyncFacts?>(null)
+
+    val hiddenAccounts: StateFlow<Set<String>> = c.prefs.hiddenAccounts
+
+    /** 同期の進み具合（上の線）と完了の知らせ */
+    val syncRun = c.sync.run
+
+    /** 一番上のまとめ（設定の値ではなく、実際に同期できたかで判断） */
+    val summary: StateFlow<SyncSummary?> = combine(_facts, c.sync.run) { f, run ->
+        f?.let { SyncSummary.of(it.copy(running = it.running || run.running)) }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    /** スマホ全体の自動同期をオンにしてよいか聞いている */
+    private val _askMaster = MutableStateFlow(false)
+    val askMaster: StateFlow<Boolean> = _askMaster.asStateFlow()
+
+    // ※ 起動時の処理（init）は、すべての状態を用意した後、クラスの最後に置く（順番を間違えると開いた瞬間に落ちる）
 
     private suspend fun readSync() {
         _facts.value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { c.sync.facts() }
@@ -69,7 +78,6 @@ class CalendarsViewModel(app: Application) : AndroidViewModel(app) {
         c.sync.request(account, manual = true)
     }
 
-    val hiddenAccounts: StateFlow<Set<String>> = c.prefs.hiddenAccounts
     fun setAccountHidden(account: String, hidden: Boolean) {
         c.prefs.setAccountHidden(account, hidden)
         _messages.tryEmit(if (hidden) "$account をこのアプリで非表示にしました" else "$account を表示しました")
@@ -97,28 +105,7 @@ class CalendarsViewModel(app: Application) : AndroidViewModel(app) {
         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { c.sync.requestAll(upload = true, manual = true) }
     }
 
-    /** 同期の進み具合（上の線）と完了の知らせ */
-    val syncRun = c.sync.run
-
-    /** 一番上のまとめ（設定の値ではなく、実際に同期できたかで判断） */
-    val summary: StateFlow<SyncSummary?> = combine(_facts, c.sync.run) { f, run ->
-        f?.let { SyncSummary.of(it.copy(running = it.running || run.running)) }
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
-
-    init {
-        viewModelScope.launch {
-            c.sync.finished.collect { r ->
-                readSync()
-                if (r.manual) _messages.tryEmit(syncDoneMessage(r))
-            }
-        }
-    }
-
     // ---------------- まとめの 1 枚のボタン ----------------
-
-    /** スマホ全体の自動同期をオンにしてよいか聞いている */
-    private val _askMaster = MutableStateFlow(false)
-    val askMaster: StateFlow<Boolean> = _askMaster.asStateFlow()
 
     /** まとめのボタン（オンにする／もう一度送る／今すぐ同期） */
     fun summaryAction() {
@@ -146,6 +133,19 @@ class CalendarsViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun setVisible(cal: CalendarInfo, visible: Boolean) = c.prefs.setCalendarVisible(cal.id, visible)
+
+    init {
+        reload()
+        viewModelScope.launch {
+            while (true) { readSync(); kotlinx.coroutines.delay(3000) }
+        }
+        viewModelScope.launch {
+            c.sync.finished.collect { r ->
+                readSync()
+                if (r.manual) _messages.tryEmit(syncDoneMessage(r))
+            }
+        }
+    }
 }
 
 /** 同期が終わったときの知らせ */

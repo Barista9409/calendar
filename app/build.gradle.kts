@@ -83,6 +83,8 @@ dependencies {
     implementation(libs.compose.material.icons)
     implementation(libs.compose.ui.tooling.preview)
     debugImplementation(libs.compose.ui.tooling)
+    // 画面を実際に描いて落ちないか確かめるテスト用
+    debugImplementation(libs.compose.ui.test.manifest)
     implementation(libs.work.runtime)
     implementation(libs.glance.appwidget)
     implementation(libs.glance.material3)
@@ -95,6 +97,8 @@ dependencies {
 
     testImplementation(libs.junit)
     testImplementation(libs.robolectric)
+    testImplementation(platform(libs.compose.bom))
+    testImplementation(libs.compose.ui.test.junit4)
     testImplementation(libs.androidx.test.core)
     testImplementation(libs.org.json)
 }

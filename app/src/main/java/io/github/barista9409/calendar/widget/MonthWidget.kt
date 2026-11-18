@@ -292,7 +292,7 @@ object MonthWidget {
     }
 
     /** 外枠：背景、見出し、ボタン、曜日、週の一覧 */
-    private fun frame(context: Context, id: Int): RemoteViews {
+    internal fun frame(context: Context, id: Int): RemoteViews {
         val c = widgetColors(context)
         val rv = RemoteViews(context.packageName, R.layout.widget_month)
         rv.setInt(R.id.bg, "setColorFilter", c.bg or (0xFF shl 24))
@@ -302,7 +302,11 @@ object MonthWidget {
             Intent(context, MonthWidgetReceiver::class.java).setAction(ACTION_REFRESH)
                 .putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, id).setData(Uri.parse("calendar://monthwidget/$id/refresh")),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
-        rv.setContentDescription(R.id.title, "今日に戻る")
+        rv.setContentDescription(R.id.title, "今日に戻って更新")
+        // 見出しタップの更新中は、描き直してもくるくるを出したままにする（6 秒たったら出さない）
+        val began = store(context).getLong("refresh_$id", 0L)
+        rv.setViewVisibility(R.id.spinner,
+            if (began > 0 && System.currentTimeMillis() - began < 6000) android.view.View.VISIBLE else android.view.View.GONE)
         rv.setTextColor(R.id.title, c.text)
         rv.setInt(R.id.btn_add_bg, "setColorFilter", c.primary)
         rv.setInt(R.id.btn_add_ic, "setColorFilter", c.onPrimary)

@@ -93,23 +93,15 @@ fun CalendarsScreen(onBack: () -> Unit, autoFix: Boolean = false, vm: CalendarsV
     val unsynced by vm.unsynced.collectAsStateWithLifecycle()
     val summary by vm.summary.collectAsStateWithLifecycle()
     val run by vm.syncRun.collectAsStateWithLifecycle()
-    val fixStep by vm.fixStep.collectAsStateWithLifecycle()
+    val askMaster by vm.askMaster.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val snackbar = remember { SnackbarHostState() }
     var open by remember { mutableStateOf<CalendarInfo?>(null) }
     var trouble by remember { mutableStateOf(false) }
     var topMenu by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { vm.messages.collect { snackbar.showSnackbar(it) } }
-    // 初回の案内から来たときは、すぐに直す
-    LaunchedEffect(autoFix) { if (autoFix) vm.fixAll() }
-    // アカウントを見えるようにする（Android 標準の「アカウントの選択」）
-    val chooser = androidx.activity.compose.rememberLauncherForActivityResult(
-        androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()) { vm.chosen() }
-    LaunchedEffect(fixStep) {
-        val st = fixStep
-        if (st is CalendarsViewModel.FixStep.Choose)
-            runCatching { chooser.launch(context.container.sync.chooseAccountIntent(st.account)) }.onFailure { vm.chosen() }
-    }
+    // 初回の案内から来たときは、すぐにオンにするか聞く
+    LaunchedEffect(autoFix, summary) { if (autoFix && summary?.kind == SyncSummary.Kind.MASTER_OFF) vm.summaryAction() }
     fun browse(url: String) = runCatching {
         context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url)))
     }
@@ -144,7 +136,7 @@ fun CalendarsScreen(onBack: () -> Unit, autoFix: Boolean = false, vm: CalendarsV
             if (busy || run.running) LinearProgressIndicator(Modifier.fillMaxWidth()) else Spacer(Modifier.height(4.dp))
             LazyColumn(Modifier.fillMaxSize()) {
                 item(key = "summary") {
-                    SummaryCard(summary, busy, onSync = vm::syncNow, onFix = vm::fixAll)
+                    summary?.let { SummaryCard(it, busy, onAction = vm::summaryAction) }
                 }
                 // 同期していないカレンダーしかないアカウントも出す
                 val groups = calendars.groupBy { it.accountName } + unsynced.map { it.third }.distinct()
@@ -153,12 +145,8 @@ fun CalendarsScreen(onBack: () -> Unit, autoFix: Boolean = false, vm: CalendarsV
                     val isGoogle = list.any { it.isGoogle } || unsynced.any { it.third == account }
                     val isLinked = account in linked
                     val accHidden = account in hiddenAccounts
-                    val st = sync[account]
                     item(key = "h$account") {
                         AccountHeader(account, isGoogle, isLinked, busy, accHidden,
-                            problem = st?.takeIf { !accHidden && (it.isError || !it.access) }?.let {
-                                if (it.isError) "同期が止まっています" else "同期の状態を確認できません"
-                            },
                             onLink = { vm.link(account) }, onUnlink = { vm.unlink(account) },
                             onHide = { vm.setAccountHidden(account, it) },
                             onRemoveFromDevice = {
@@ -179,16 +167,13 @@ fun CalendarsScreen(onBack: () -> Unit, autoFix: Boolean = false, vm: CalendarsV
         }
     }
 
-    when (fixStep) {
-        CalendarsViewModel.FixStep.AskMaster -> AlertDialog(
+    if (askMaster) AlertDialog(
             onDismissRequest = { vm.answerMaster(false) },
             title = { Text("スマホ全体の自動同期をオンにします") },
             text = { Text("Google カレンダーの変更が自動で届くようになります。Gmail など、ほかのアプリの自動同期もオンになります。") },
             confirmButton = { TextButton(onClick = { vm.answerMaster(true) }) { Text("オンにする") } },
             dismissButton = { TextButton(onClick = { vm.answerMaster(false) }) { Text("オンにしない") } },
         )
-        else -> {}
-    }
 
     if (trouble) TroubleDialog(sync.values.filter { it.account !in hiddenAccounts }, onClose = { trouble = false },
         onOpenSettings = { openAccountSettings(it) })
@@ -200,13 +185,13 @@ fun CalendarsScreen(onBack: () -> Unit, autoFix: Boolean = false, vm: CalendarsV
     }
 }
 
-/** 一番上のまとめ：最新か・同期中か・送信待ちか・止まっているか、だけを出す */
+/** 一番上のまとめ：同期できているか・同期中か・送信待ちか・送れていないか・自動同期がオフか、だけを出す */
 @Composable
-private fun SummaryCard(s: io.github.barista9409.calendar.data.SyncSummary, busy: Boolean, onSync: () -> Unit, onFix: () -> Unit) {
+private fun SummaryCard(s: SyncSummary, busy: Boolean, onAction: () -> Unit) {
     val scheme = MaterialTheme.colorScheme
-    val bad = s.kind == SyncSummary.Kind.STOPPED
-    val bg = when (s.kind) { SyncSummary.Kind.STOPPED -> scheme.errorContainer; SyncSummary.Kind.CHECK -> scheme.tertiaryContainer; else -> scheme.surfaceVariant }
-    val fg = when (s.kind) { SyncSummary.Kind.STOPPED -> scheme.onErrorContainer; SyncSummary.Kind.CHECK -> scheme.onTertiaryContainer; else -> scheme.onSurface }
+    val bad = s.isError
+    val bg = if (bad) scheme.errorContainer else scheme.surfaceVariant
+    val fg = if (bad) scheme.onErrorContainer else scheme.onSurface
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).clip(RoundedCornerShape(16.dp))
             .background(bg).padding(14.dp),
@@ -224,10 +209,11 @@ private fun SummaryCard(s: io.github.barista9409.calendar.data.SyncSummary, busy
             Text(s.title, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = fg)
             if (s.sub.isNotBlank()) Text(s.sub, fontSize = 12.sp, color = fg.copy(alpha = 0.8f))
         }
-        if (s.needsFix) androidx.compose.material3.Button(onClick = onFix, enabled = !busy) { Text("直す") }
-        else OutlinedButton(onClick = onSync, enabled = !busy && s.kind != SyncSummary.Kind.SYNCING) { Text("今すぐ同期") }
+        if (s.action.isNotBlank()) {
+            if (bad) androidx.compose.material3.Button(onClick = onAction, enabled = !busy) { Text(s.action) }
+            else OutlinedButton(onClick = onAction, enabled = !busy) { Text(s.action) }
+        }
     }
-    if (bad) Spacer(Modifier.height(0.dp))
 }
 
 /** 困ったとき：アカウントごとの詳しい状態（問い合わせのときに見る） */
@@ -238,12 +224,12 @@ private fun TroubleDialog(list: List<io.github.barista9409.calendar.data.SyncSta
         title = { Text("困ったとき（詳しい状態）") },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("予定のやりとりは、スマホの Google の同期機能が行います。うまくいかないときは、このスクリーンショットを送ってください。",
+                Text("予定のやりとりは、スマホの Google の同期機能が行います。下はスマホが返す設定の値です。機種によっては、" +
+                    "実際には同期できていても「オフ」と返すことがあるので、参考にとどめてください。" +
+                    "うまくいかないときは、このスクリーンショットを送ってください。",
                     fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 list.forEach { st ->
                     Text(st.account, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                    Text(st.message, fontSize = 12.sp)
-                    Text(st.lastLine(), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     st.details.forEach { (k, v) ->
                         Row(Modifier.fillMaxWidth()) {
                             Text(k, fontSize = 12.sp, modifier = Modifier.weight(1f))
@@ -290,7 +276,6 @@ private fun AddCalendars(items: List<Triple<Long, String, String>>, busy: Boolea
 @Composable
 private fun AccountHeader(
     account: String, isGoogle: Boolean, linked: Boolean, busy: Boolean, hidden: Boolean,
-    problem: String?,
     onLink: () -> Unit, onUnlink: () -> Unit,
     onHide: (Boolean) -> Unit, onRemoveFromDevice: () -> Unit,
 ) {
@@ -303,7 +288,6 @@ private fun AccountHeader(
                 Text(account, fontWeight = FontWeight.Bold, color = if (hidden) scheme.onSurfaceVariant else scheme.onSurface)
                 if (hidden) Text("このアプリでは非表示", fontSize = 12.sp, color = scheme.onSurfaceVariant)
                 else if (isGoogle && linked) Text("Google と連携済み（添付ファイルが使えます）", fontSize = 12.sp, color = scheme.primary)
-                if (!hidden && problem != null) Text("⚠ $problem（上の［直す］で直せます）", fontSize = 12.sp, color = scheme.error)
             }
             Box {
                 IconButton(onClick = { menu = true }) { Icon(Icons.Outlined.MoreVert, contentDescription = "アカウントのメニュー") }

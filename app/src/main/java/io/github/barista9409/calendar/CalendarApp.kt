@@ -31,6 +31,8 @@ class CalendarApp : Application() {
         container.sync.startWatching()
         // カレンダーが変わったら（同期で届いた変更も）ウィジェットを描き直す
         io.github.barista9409.calendar.widget.WidgetRefreshJob.schedule(this)
+        // 前に開いたときから同期があったかを確かめる
+        Thread { runCatching { container.sync.checkRemoteSync() } }.start()
     }
 }
 

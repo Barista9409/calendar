@@ -1,6 +1,8 @@
 package io.github.barista9409.calendar
 
 import io.github.barista9409.calendar.data.SyncStatus
+import io.github.barista9409.calendar.data.SyncSummary
+import io.github.barista9409.calendar.data.lastSyncLine
 import io.github.barista9409.calendar.widget.MonthWidget
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -10,57 +12,49 @@ import java.time.LocalDate
 
 /** 同期の状態の表示と、ウィジェットの見出し */
 class SyncStatusTest {
-    private fun st(master: Boolean = true, acc: Boolean = true, active: Boolean = false, pending: Boolean = false,
-                   unsynced: Int = 0, syncable: Int = 1, dirty: Int = 0, access: Boolean = true,
-                   last: Long = 0L, req: Long = 0L) =
-        SyncStatus("a@gmail.com", master, acc, active, pending, unsynced, syncable, dirty, last, req, access)
+    private fun f(master: Boolean = true, running: Boolean = false, pending: Int = 0, stuck: Int = 0, last: Long = 0L) =
+        io.github.barista9409.calendar.data.SyncFacts(master, running, pending, stuck, last, 0L)
 
-    @Test fun problemsAreFixableInApp() {
-        assertTrue(st(master = false).message.contains("スマホ全体の自動同期がオフ"))
-        assertEquals(SyncStatus.Fix.MASTER, st(master = false).fix)
-        assertEquals(SyncStatus.Fix.ACCOUNT, st(acc = false).fix)
-        assertEquals(SyncStatus.Fix.ACCOUNT, st(syncable = 0).fix)
-        assertTrue(st(acc = false).isError)
-        assertTrue(st(unsynced = 2).message.contains("2 個"))
+    @Test fun summaryJudgesByResultsNotSettings() {
+        // スマホが返すアカウントごとの設定（オフ・対象外など）は判断に使わない。結果だけで判断する
+        assertEquals(SyncSummary.Kind.OK, SyncSummary.of(f()).kind)
+        assertEquals("同期できています", SyncSummary.of(f()).title)
+        assertEquals(SyncSummary.Kind.SYNCING, SyncSummary.of(f(running = true)).kind)
+        val pend = SyncSummary.of(f(pending = 2))
+        assertEquals(SyncSummary.Kind.PENDING, pend.kind); assertEquals("送信待ち 2 件", pend.title); assertFalse(pend.isError)
+        val stuck = SyncSummary.of(f(pending = 2, stuck = 1))
+        assertEquals(SyncSummary.Kind.STUCK, stuck.kind); assertTrue(stuck.isError); assertEquals("もう一度送る", stuck.action)
+        // スマホ全体の自動同期オフ（これは正しく読める）は最優先
+        val off = SyncSummary.of(f(master = false, running = true, stuck = 1))
+        assertEquals(SyncSummary.Kind.MASTER_OFF, off.kind); assertEquals("オンにする", off.action)
     }
 
-    @Test fun invisibleAccountIsNotReportedAsOff() {
-        // Android 13 以降、アプリから見えないアカウントは読み取りが常に「オフ」になる。誤って「オフ」と警告しない
-        val s = st(acc = false, syncable = 0, access = false)
-        assertEquals(SyncStatus.Fix.ACCESS, s.fix)
-        assertFalse(s.isError)
-        assertTrue(s.message.contains("見えません"))
-        assertTrue(s.details.any { it.second.contains("見えないため不明") })
+    @Test fun lastSyncLineFormat() {
+        val zone = java.time.ZoneId.of("Asia/Tokyo")
+        val today = LocalDate.of(2026, 11, 17)
+        val t = java.time.ZonedDateTime.of(2026, 11, 17, 14, 3, 0, 0, zone).toInstant().toEpochMilli()
+        assertEquals("最後の同期：今日 14:03", lastSyncLine(t, today, zone))
+        assertEquals("最後の同期：昨日 14:03", lastSyncLine(t, today.plusDays(1), zone))
+        assertEquals("最後の同期：11/17 14:03", lastSyncLine(t, today.plusDays(3), zone))
+        assertEquals("最後の同期：まだ確認していません", lastSyncLine(0L, today, zone))
+        assertTrue(SyncSummary.of(f(last = t), today, zone).sub.contains("今日 14:03"))
+    }
+
+    @Test fun detailsAreForReferenceOnly() {
+        val st = SyncStatus("a@example.com", true, false, false, false, syncable = 0, access = true)
+        assertTrue(st.details.any { it.first.contains("カレンダー自動同期") && it.second == "オフ" })
     }
 
     @Test fun syncProgressDone() {
         // 動いているのを見て止まった → 完了
-        assertTrue(io.github.barista9409.calendar.data.SyncProgress.isDone(5000, running = false, sawRunning = true, changedAfterStart = false, quiet = true, dirty = 0))
+        assertTrue(io.github.barista9409.calendar.data.SyncProgress.isDone(5000, running = false, sawRunning = true, changedAfterStart = false, quiet = true, pending = 0))
         // 頼んだ後に書き換わって静かになった → 完了
-        assertTrue(io.github.barista9409.calendar.data.SyncProgress.isDone(5000, false, false, changedAfterStart = true, quiet = true, dirty = 0))
+        assertTrue(io.github.barista9409.calendar.data.SyncProgress.isDone(5000, false, false, changedAfterStart = true, quiet = true, pending = 0))
         // 動いている最中・未送信が残る・何も起きていない・直後 → まだ
-        assertFalse(io.github.barista9409.calendar.data.SyncProgress.isDone(5000, running = true, sawRunning = true, changedAfterStart = true, quiet = true, dirty = 0))
-        assertFalse(io.github.barista9409.calendar.data.SyncProgress.isDone(5000, false, true, true, true, dirty = 2))
+        assertFalse(io.github.barista9409.calendar.data.SyncProgress.isDone(5000, running = true, sawRunning = true, changedAfterStart = true, quiet = true, pending = 0))
+        assertFalse(io.github.barista9409.calendar.data.SyncProgress.isDone(5000, false, true, true, true, pending = 2))
         assertFalse(io.github.barista9409.calendar.data.SyncProgress.isDone(5000, false, false, false, true, 0))
         assertFalse(io.github.barista9409.calendar.data.SyncProgress.isDone(500, false, true, true, true, 0))
-    }
-
-    @Test fun normalStates() {
-        assertTrue(st(active = true).message.contains("同期しています"))
-        assertTrue(st(pending = true).message.contains("待って"))
-        assertTrue(st(dirty = 3).message.contains("送っていない変更が 3 件"))
-        assertTrue(st().message.contains("同期はオン"))
-        assertEquals(SyncStatus.Fix.NONE, st().fix)
-    }
-
-    @Test fun lastSyncLine() {
-        val zone = java.time.ZoneId.of("Asia/Tokyo")
-        val today = LocalDate.of(2026, 11, 17)
-        val t = java.time.ZonedDateTime.of(2026, 11, 17, 14, 3, 0, 0, zone).toInstant().toEpochMilli()
-        assertEquals("最後の同期：今日 14:03", st(last = t).lastLine(today, zone))
-        assertEquals("最後の同期：昨日 14:03", st(last = t).lastLine(today.plusDays(1), zone))
-        assertEquals("同期を頼んだ時刻：今日 14:03", st(req = t).lastLine(today, zone))
-        assertTrue(st().lastLine(today, zone).contains("まだ"))
     }
 
     @Test fun widgetTitleIsTodayNotTheScrolledMonth() {
@@ -77,24 +71,6 @@ class SyncStatusTest {
         val lastWeek = MonthWidget.listStart(today).plusWeeks(weeks - 1L)
         assertTrue(!lastWeek.isAfter(LocalDate.of(2027, 1, 31)) && lastWeek.plusDays(6) >= LocalDate.of(2027, 1, 31))
         assertEquals(14, weeks)
-    }
-
-    @Test fun summaryShowsOnlyOneState() {
-        val S = io.github.barista9409.calendar.data.SyncSummary
-        assertEquals(io.github.barista9409.calendar.data.SyncSummary.Kind.OK, S.of(listOf(st(), st()), running = false, lastLine = "最後の同期：今日 9:00").kind)
-        assertEquals("最新です", S.of(listOf(st()), false, "").title)
-        assertEquals(io.github.barista9409.calendar.data.SyncSummary.Kind.SYNCING, S.of(listOf(st()), running = true, lastLine = "").kind)
-        val pend = S.of(listOf(st(dirty = 2), st(dirty = 1)), false, "")
-        assertEquals(io.github.barista9409.calendar.data.SyncSummary.Kind.PENDING, pend.kind); assertEquals("送信待ち 3 件", pend.title)
-        // 止まっているときは同期中より優先して［直す］を出す
-        val stop = S.of(listOf(st(), st(acc = false)), running = true, lastLine = "")
-        assertEquals(io.github.barista9409.calendar.data.SyncSummary.Kind.STOPPED, stop.kind); assertTrue(stop.needsFix)
-        assertEquals(io.github.barista9409.calendar.data.SyncSummary.Kind.STOPPED, S.of(listOf(st(master = false)), false, "").kind)
-        // 見えないだけのアカウントは赤くせず、確認を促す
-        val check = S.of(listOf(st(access = false)), false, "")
-        assertEquals(io.github.barista9409.calendar.data.SyncSummary.Kind.CHECK, check.kind); assertTrue(check.needsFix)
-        // 同期していないカレンダーはエラーにしない（「ほかのカレンダーを追加」に出す）
-        assertEquals(io.github.barista9409.calendar.data.SyncSummary.Kind.OK, S.of(listOf(st(unsynced = 2)), false, "").kind)
     }
 
     @Test fun pendingUploadMark() {

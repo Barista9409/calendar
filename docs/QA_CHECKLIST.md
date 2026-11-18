@@ -34,14 +34,14 @@
 | 27 | Google の審査・テストユーザー登録が必要（制限付き・機密の権限を使っていた） | 自動：AttachmentServiceTest（権限は drive.file だけ／説明への添付リンクの追加・削除・編集で消えない）。目視：CalendarApi を使っていない、カレンダー管理に「Google カレンダーで設定を開く」 |
 | 28 | 予定の入力画面で添付できない | 自動：AttachmentServiceTest.editingKeepsAttachments。目視：入力画面に「ファイルを添付」（複数選択・×で外せる・添付済みの表示）、保存後に uploadPending でアップロード |
 | 29 | 月ウィジェットの見出しと表示がずれる | 自動：SyncStatusTest.widgetTitleIsTodayNotTheScrolledMonth（見出しは今日の日付）。目視：［‹］［›］・見出しタップで goAsync してスクロールを待つ |
-| 30 | Google カレンダーにある予定が出ない・同期の状態が分からない | 自動：SyncStatusTest。目視：「カレンダーと同期」の一番上のまとめ、「＋ ほかのカレンダーを追加」と［追加］、メニューに同期オフの警告、manifest に READ_SYNC_SETTINGS / READ_SYNC_STATS / WRITE_SYNC_SETTINGS |
+| 30 | Google カレンダーにある予定が出ない・同期の状態が分からない | 自動：SyncStatusTest.summaryJudgesByResultsNotSettings。目視：「カレンダーと同期」の一番上のまとめ、「＋ ほかのカレンダーを追加」と［追加］、manifest に READ_SYNC_SETTINGS / READ_SYNC_STATS / WRITE_SYNC_SETTINGS |
 | 31 | 月ウィジェットの見出し・ボタンが分かりにくい、スクロール中に何月か分からない | 自動：MonthWidgetRenderTest.railShowsMonthOfTheWeek / firstOfMonthShowsMonth、SyncStatusTest（「本日：…」）。目視：見出しは中央の「本日：…」（タップで今日へ）と右の＋だけ、左に月の列、曜日 13sp 太字、偶数月の塗り分け、日ウィジェットも「本日：…」中央 |
 | 32 | 同期オフの［設定を開く］でパスワードの画面に飛び、何をすればいいか分からない | 目視：［直す］はアプリ内で設定する。「困ったとき」の［スマホの同期の設定を開く］は ACCOUNT_SYNC_SETTINGS（account 付き）でそのアカウントの同期画面を開く |
-| 33 | 実際は同期オンなのに「カレンダー同期がオフ」と赤く警告される | 自動：SyncStatusTest.unreliableReadingIsNotShownAsError（アプリからオンにしても読み取りがオフのままなら「不正確」として警告しない）。目視：［自動同期をオンにする］の後に読み取りがオフのままなら案内に切り替わる |
-| 34 | 同期の状態がちゃんと分からない・同期が確実に動かない | 自動：SyncStatusTest（fix の判定・「最後の同期」の表示・未送信件数）。目視：manifest に WRITE_SYNC_SETTINGS、カレンダー管理に「最後の同期」「詳しく」（生の値）・［今すぐ同期］（MANUAL+EXPEDITED、自動同期オフでも動く）・［自動同期をオンにする］（アプリ内で setSyncAutomatically / setMasterSyncAutomatically）。CalendarRepository の全書き込み（追加・変更・時刻変更・この回のみ・すべて・これ以降・削除）と添付の説明更新の後に sync.localChanged()（UPLOAD を依頼）。アプリを開いたとき requestIfStale、メニュー「今すぐ同期」、月ウィジェットの見出しタップでも同期を依頼 |
+| 33 | 実際は同期オンなのに「カレンダー同期がオフ」と赤く警告される | 自動：SyncStatusTest.summaryJudgesByResultsNotSettings（アカウントごとの設定の値は判断に使わない）。目視：アカウント見出しに警告を出さない。設定の値は「困ったとき」に参考として出し、「正しくないことがある」と書く |
+| 34 | 同期の状態がちゃんと分からない・同期が確実に動かない | 自動：SyncStatusTest。目視：［今すぐ同期］は requestSync（MANUAL+EXPEDITED）。CalendarRepository の全書き込みと添付の説明更新の後に sync.localChanged(予定 ID) で送信待ちとして記録し UPLOAD を依頼。アプリを開いたとき requestIfStale、メニュー「今すぐ同期」、月ウィジェットの見出しタップでも依頼 |
 
 | 35 | 月ウィジェットの動作が重い、今日に戻るボタンが欲しい | 自動：SyncStatusTest.monthWidgetShowsThisMonthAndTwoMore（今月から 3 か月だけ読む）。目視：上へは今月より前に行かない、見出し「本日：…」タップで今月の先頭へ戻る |
-| 36 | 同期の状態が見えず「設定を確認できませんでした」になる・同期の依頼が効かない（Android 13 以降、見えないアカウントは読み取りが常にオフ・依頼は無視） | 自動：SyncStatusTest.invisibleAccountIsNotReportedAsOff。目視：見えないアカウントは赤くせず［見られるようにする］（AccountManager.newChooseAccountIntent）、依頼は requestSync(null, …)（アカウント指定なし）で必ず届く、進み具合は getCurrentSyncs |
+| 36 | 同期の状態が見えず「設定を確認できませんでした」になる・同期の依頼が効かない（Android 13 以降、見えないアカウントは読み取りが常にオフ・依頼は無視） | 目視：同期の依頼はアカウント指定なし requestSync(null, …)（必ず届く）、進み具合は getCurrentSyncs |
 | 37 | 同期の進捗と完了が分からない | 自動：SyncStatusTest.syncProgressDone。目視：同期中は上のバーの下に細い線、カレンダー管理に「同期しています…」、押した同期は「同期が完了しました（H:mm）」か、60 秒で「同期を頼みました…」と表示 |
 | 38 | 予定の詳細の作成者に共有カレンダーの ID が出る | 目視：予定の詳細に「作成者」を出さない（ユーザーの判断で表示なし） |
 | 39 | 添付のプレビューが切れる・出すか選べない | 目視：画像・PDF は ContentScale.Fit で全体（縦長は最大 420dp）、設定 → 添付ファイル →「画像・PDF のプレビューを表示」でオフにできる |
@@ -51,11 +51,12 @@
 | 43 | 添付ファイルがどの予定のものか分からない | 自動：AttachmentServiceTest.driveFileNameHasDateAndTitle（「日付_予定名_元の名前」）。目視：詳細からの添付・入力画面からの添付の両方で付く |
 | 44 | 予定を消したときの添付ファイルの扱い | 目視：単発・「すべて」の削除で添付があれば「添付ファイルも削除しますか？」（［ファイルは残す］／［ファイルも削除］、外側タップでやめる）。「元に戻す」なら消さない。「この予定のみ」「これ以降」では聞かない |
 | 45 | メニューに最終同期日時が無い | 目視：メニューの「カレンダーと同期」の下に「最後の同期：…」、同期中は「同期しています…」 |
-| 46 | 同期画面がややこしい | 自動：SyncStatusTest.summaryShowsOnlyOneState。目視：一番上に 1 枚だけ（最新です／同期しています…／送信待ち N 件／同期が止まっています［直す］／確認できません［直す］）。アカウントの見出しには問題があるときだけ一言。細かい値は ︙ →「困ったとき（詳しい状態）」。同期していないカレンダーは「＋ ほかのカレンダーを追加」 |
-| 47 | ［直す］で全部まとめて直す | 目視：全体の自動同期オフなら確認ダイアログ → 見えないアカウントは標準のアカウント選択を順に → 見えるアカウントはカレンダー同期オン → 同期。直せなかったアカウントを知らせる |
-| 48 | 初回に同期の準備を案内 | 目視：通知の質問のあと、準備が要るアカウントがあれば「Google カレンダーと同期する準備」（［準備する］でカレンダーと同期の画面を開き［直す］を自動で実行、［あとで］）。1 回だけ |
+| 46 | 同期画面がややこしい | 自動：SyncStatusTest.summaryJudgesByResultsNotSettings。目視：一番上に 1 枚だけ（同期できています／同期しています…／送信待ち N 件／送れていない変更があります［もう一度送る］／自動同期がオフです［オンにする］）。細かい値は ︙ →「困ったとき」 |
+| 47 | ［直す］で全部まとめて直す | 目視：［もう一度送る］は送信を依頼（見えるアカウントは自動同期もオン）。［オンにする］は確認してからスマホ全体の自動同期をオン |
+| 48 | 初回に同期の準備を案内 | 目視：初回の案内は、スマホ全体の自動同期がオフのときだけ（［準備する］でオンにするか確認）。1 回だけ |
 | 49 | 下に引っぱって同期 | 目視：カレンダーの一番上で下に引っぱると今すぐ同期（PullToRefreshBox）、終わると「同期が完了しました」 |
-| 50 | Google にまだ届いていない予定が分からない | 自動：SyncStatusTest.pendingUploadMark。目視：DIRTY=1 の予定は月・週・日・予定リスト・日の一覧で先頭に「↑」、詳細に「Google へ送信待ち」。送られると自動で消える |
+| 50 | Google にまだ届いていない予定が分からない | 自動：SyncStatusTest.pendingUploadMark。目視：「↑」はこのアプリで変えてまだ届いていない予定だけ（SyncCenter.pendingEdits。DIRTY が 0 になる・行が消えると外れる） |
 | 51 | Google 側の変更が同期で届いてもウィジェットが変わらない（アプリを開くまで古いまま） | 目視：WidgetRefreshJob（CalendarContract.CONTENT_URI の変更で動くジョブ、2〜10 秒でまとめて描き直し、動くたびに予約し直し）。CalendarApp.onCreate で予約、manifest に BIND_JOB_SERVICE のサービス |
 | 52 | ウィジェットの更新が始まったか分からない | 目視：月ウィジェットの見出しタップで左にくるくる（最低 1.2 秒、読み込み後に消える、6 秒で必ず消える） |
+| 53 | 実際は同期できているのに「同期が止まっています」と出る（スマホがアカウントごとの設定を正しく返さない） | 自動：SyncStatusTest.summaryJudgesByResultsNotSettings。目視：判断は「スマホ全体の自動同期」「このアプリで変えた予定が届いたか（15 分で送れていない扱い）」「同期用の欄（CAL_SYNC1〜10）が変わったか＝最後の同期」だけ。WidgetRefreshJob とアプリ起動時にも checkRemoteSync |
 作業環境のビルドと単体テストが成功し、上の目視項目を確認してからリリースする。

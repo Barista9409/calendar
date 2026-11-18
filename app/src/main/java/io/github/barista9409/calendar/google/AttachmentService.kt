@@ -38,7 +38,7 @@ class AttachmentService(
         context.contentResolver.update(ContentUris.withAppendedId(Events.CONTENT_URI, eventId),
             ContentValues().apply { put(Events.DESCRIPTION, text) }, null, null)
         // 添付のリンクを Google に送る
-        runCatching { (context.applicationContext as io.github.barista9409.calendar.CalendarApp).container.sync.localChanged() }
+        runCatching { (context.applicationContext as io.github.barista9409.calendar.CalendarApp).container.sync.localChanged(eventId) }
         Unit
     }
 

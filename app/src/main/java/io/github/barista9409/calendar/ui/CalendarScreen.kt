@@ -121,16 +121,16 @@ fun CalendarScreen(vm: CalendarViewModel, onOpenUpdate: () -> Unit, onOpenCalend
             if (prefs.syncSetupAsked) return@LaunchedEffect
             need = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                 val sc = ctx.container.sync
-                sc.googleAccounts().filter { it !in prefs.hiddenAccounts.value }.map { sc.status(it) }
-                    .any { it.isError || !it.access }
+                // 案内するのは、確実に分かる「スマホ全体の自動同期がオフ」のときだけ
+                sc.googleAccounts().isNotEmpty() && !sc.facts().masterOn
             }
             if (!need) prefs.syncSetupAsked = true
         }
         if (need && prefs.notifyChoiceAsked) androidx.compose.material3.AlertDialog(
             onDismissRequest = {},
             title = { Text("Google カレンダーと同期する準備") },
-            text = { Text("予定が Google カレンダーと確実にそろうように、同期の設定を確認します。\n" +
-                "このあと出る画面で、同期するアカウントを選んでください（パスワードの入力はありません）。") },
+            text = { Text("スマホ全体の自動同期がオフになっています。このままでは Google カレンダーの変更が自動では届きません。\n" +
+                "［準備する］を押すと、オンにするか確認します。") },
             confirmButton = { androidx.compose.material3.TextButton(onClick = {
                 prefs.syncSetupAsked = true; need = false; onSetupSync()
             }) { Text("準備する") } },
@@ -495,21 +495,21 @@ private fun AppDrawer(
             val syncCenter = androidx.compose.ui.platform.LocalContext.current.container.sync
             var syncOff by remember { mutableStateOf(false) }
             var lastLine by remember { mutableStateOf("") }
+            var syncTitle by remember { mutableStateOf("") }
             val run by syncCenter.run.collectAsStateWithLifecycle()
             LaunchedEffect(accounts, run.running) {
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                    val st = accounts.map { a -> syncCenter.status(a) }
-                    syncOff = st.any { it.isError }
-                    // いちばん新しい同期の時刻（全アカウントまとめて同期するので 1 つにまとめる）
-                    lastLine = io.github.barista9409.calendar.data.SyncStatus("", true, true, false, false,
-                        lastSyncAt = st.maxOfOrNull { it.lastSyncAt } ?: 0L,
-                        lastRequestAt = st.maxOfOrNull { it.lastRequestAt } ?: 0L).lastLine()
+                    // 実際に同期できたかで判断する（スマホが返すアカウントごとの設定の値は当てにならない）
+                    val sum = io.github.barista9409.calendar.data.SyncSummary.of(syncCenter.facts())
+                    syncOff = sum.isError
+                    syncTitle = sum.title
+                    lastLine = io.github.barista9409.calendar.data.lastSyncLine(syncCenter.lastSyncAll())
                 }
             }
             NavigationDrawerItem(label = {
                 Column {
                     Text("カレンダーと同期")
-                    if (syncOff) Text("自動同期がオフです（ここでオンにできます）", fontSize = 12.sp, color = scheme.error)
+                    if (syncOff) Text("$syncTitle（ここで直せます）", fontSize = 12.sp, color = scheme.error)
                     Text(if (run.running) "同期しています…" else lastLine, fontSize = 12.sp, color = scheme.onSurfaceVariant)
                 }
             }, icon = { Icon(Icons.Outlined.Settings, null) },

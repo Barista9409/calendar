@@ -22,6 +22,8 @@ class WidgetRefreshJob : JobService() {
         val app = applicationContext
         CoroutineScope(SupervisorJob() + Dispatchers.Default).launch {
             try {
+                // アプリが閉じていても、同期で届いたのを記録する（「最後の同期」の時刻）
+                runCatching { (app as io.github.barista9409.calendar.CalendarApp).container.sync.checkRemoteSync() }
                 runCatching { WidgetUpdater.updateAll(app) }
             } finally {
                 schedule(app)

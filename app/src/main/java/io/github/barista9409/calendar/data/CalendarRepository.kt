@@ -119,13 +119,8 @@ class CalendarRepository(private val context: Context, private val prefs: Prefs,
         if (calendarColors.isEmpty()) calendars()
         val calColors = calendarColors
         val list = mutableListOf<EventInstance>()
-        // まだ Google に送っていない予定（同期機能が送ると DIRTY が 0 に戻る）
-        val dirty = runCatching {
-            val ids = HashSet<Long>()
-            cr.query(Events.CONTENT_URI, arrayOf(Events._ID), "${Events.DIRTY}=1 AND ${Events.ACCOUNT_TYPE}=?",
-                arrayOf("com.google"), null)?.use { d -> while (d.moveToNext()) ids += d.getLong(0) }
-            ids
-        }.getOrDefault(HashSet())
+        // このアプリで変えて、まだ Google に届いていない予定（届くと外れる）
+        val dirty = sync?.let { runCatching { it.pendingEdits().keys }.getOrNull() } ?: emptySet()
         cr.query(uri, projection, null, null, "${Instances.BEGIN} ASC")?.use { c ->
             while (c.moveToNext()) {
                 if (!c.isNull(13) && c.getInt(13) == Events.STATUS_CANCELED) continue
@@ -200,7 +195,7 @@ class CalendarRepository(private val context: Context, private val prefs: Prefs,
         val id = ContentUris.parseId(uri)
         d.reminderMinutes?.let { setReminder(id, it) }
         d.guests.forEach { addAttendee(id, it) }
-        sync?.localChanged()
+        sync?.localChanged(id)
         id
     }
 
@@ -267,7 +262,7 @@ class CalendarRepository(private val context: Context, private val prefs: Prefs,
             cr.delete(Attendees.CONTENT_URI, "${Attendees.EVENT_ID}=? AND lower(${Attendees.ATTENDEE_EMAIL})=?", arrayOf(id.toString(), email))
         }
         d.guests.filter { it.lowercase() !in current }.forEach { addAttendee(id, it) }
-        sync?.localChanged()
+        sync?.localChanged(id)
     }
 
     private fun setReminder(eventId: Long, minutes: Int) {
@@ -305,13 +300,13 @@ class CalendarRepository(private val context: Context, private val prefs: Prefs,
     suspend fun updateTimes(eventId: Long, start: Long, end: Long) = withContext(Dispatchers.IO) {
         cr.update(ContentUris.withAppendedId(Events.CONTENT_URI, eventId),
             ContentValues().apply { put(Events.DTSTART, start); put(Events.DTEND, end) }, null, null)
-        sync?.localChanged()
+        sync?.localChanged(eventId)
     }
 
     /** 繰り返しの「この予定のみ」を変更（例外として登録） */
     suspend fun saveOccurrence(d: EventDraft, eventId: Long, instanceBegin: Long, zone: ZoneId) = withContext(Dispatchers.IO) {
         val (s, e) = times(d, zone)
-        cr.insert(ContentUris.withAppendedId(Events.CONTENT_EXCEPTION_URI, eventId), ContentValues().apply {
+        val exId = cr.insert(ContentUris.withAppendedId(Events.CONTENT_EXCEPTION_URI, eventId), ContentValues().apply {
             put(Events.ORIGINAL_INSTANCE_TIME, instanceBegin)
             put(Events.TITLE, d.title.ifBlank { "(タイトルなし)" })
             put(Events.EVENT_LOCATION, d.location)
@@ -320,8 +315,8 @@ class CalendarRepository(private val context: Context, private val prefs: Prefs,
             put(Events.ALL_DAY, if (d.allDay) 1 else 0)
             put(Events.EVENT_TIMEZONE, if (d.allDay) "UTC" else zone.id)
             d.colorKey?.let { put(Events.EVENT_COLOR_KEY, it) }
-        })
-        sync?.localChanged()
+        })?.let { ContentUris.parseId(it) }
+        sync?.localChanged(eventId, *listOfNotNull(exId).toLongArray())
     }
 
     /** 繰り返しの「すべての予定」を変更（シリーズの開始をずらす） */
@@ -340,7 +335,7 @@ class CalendarRepository(private val context: Context, private val prefs: Prefs,
                 put(Events.RRULE, d.rrule ?: info.rrule)
             }, null, null)
         }
-        sync?.localChanged()
+        sync?.localChanged(eventId)
     }
 
     /** 繰り返しの「これ以降のすべての予定」を変更（元のシリーズをこの回の前で終え、新しいシリーズを作る） */
@@ -367,22 +362,22 @@ class CalendarRepository(private val context: Context, private val prefs: Prefs,
                 put(Events.RRULE, io.github.barista9409.calendar.util.Recurrence.endBefore(info.rrule, instance.begin, info.allDay))
             }, null, null)
         }
-        sync?.localChanged()
+        sync?.localChanged(instance.eventId)
     }
 
     /** 予定全体（繰り返しならシリーズ全体）を削除 */
     suspend fun deleteEvent(eventId: Long) = withContext(Dispatchers.IO) {
         cr.delete(ContentUris.withAppendedId(Events.CONTENT_URI, eventId), null, null)
-        sync?.localChanged()
+        sync?.localChanged(eventId)
     }
 
     /** 繰り返し予定の1回分だけを削除（例外としてキャンセル扱いを登録） */
     suspend fun deleteOccurrence(instance: EventInstance) = withContext(Dispatchers.IO) {
         val uri = ContentUris.withAppendedId(Events.CONTENT_EXCEPTION_URI, instance.eventId)
-        cr.insert(uri, ContentValues().apply {
+        val exId = cr.insert(uri, ContentValues().apply {
             put(Events.ORIGINAL_INSTANCE_TIME, instance.begin)
             put(Events.STATUS, Events.STATUS_CANCELED)
-        })
-        sync?.localChanged()
+        })?.let { ContentUris.parseId(it) }
+        sync?.localChanged(instance.eventId, *listOfNotNull(exId).toLongArray())
     }
 }

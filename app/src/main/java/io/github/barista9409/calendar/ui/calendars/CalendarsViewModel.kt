@@ -15,7 +15,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.SharingStarted
-import io.github.barista9409.calendar.data.SyncStatus
+import io.github.barista9409.calendar.data.SyncFacts
 import io.github.barista9409.calendar.data.SyncSummary
 
 /** カレンダー管理画面（表示・非表示、Google 連携） */
@@ -48,7 +48,11 @@ class CalendarsViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** 実際に起きたこと（画面の判断はこれだけで行う） */
+    private val _facts = MutableStateFlow<SyncFacts?>(null)
+
     private suspend fun readSync() {
+        _facts.value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { c.sync.facts() }
         val uns = c.repository.unsyncedCalendars()
         _unsynced.value = uns
         val accounts = (_calendars.value.filter { it.isGoogle }.map { it.accountName } + uns.map { it.third }).distinct()
@@ -96,14 +100,10 @@ class CalendarsViewModel(app: Application) : AndroidViewModel(app) {
     /** 同期の進み具合（上の線）と完了の知らせ */
     val syncRun = c.sync.run
 
-    /** 一番上のまとめ（このアプリで非表示のアカウントは除く） */
-    val summary: StateFlow<SyncSummary> = combine(_sync, c.sync.run, c.prefs.hiddenAccounts) { m, run, hidden ->
-        val list = m.values.filter { it.account !in hidden }
-        val last = SyncStatus("", true, true, false, false,
-            lastSyncAt = list.maxOfOrNull { it.lastSyncAt } ?: 0L,
-            lastRequestAt = list.maxOfOrNull { it.lastRequestAt } ?: 0L).lastLine()
-        SyncSummary.of(list, run.running, last)
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, SyncSummary(SyncSummary.Kind.OK, "確認しています…", ""))
+    /** 一番上のまとめ（設定の値ではなく、実際に同期できたかで判断） */
+    val summary: StateFlow<SyncSummary?> = combine(_facts, c.sync.run) { f, run ->
+        f?.let { SyncSummary.of(it.copy(running = it.running || run.running)) }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     init {
         viewModelScope.launch {
@@ -114,55 +114,34 @@ class CalendarsViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    // ---------------- ［直す］：まとめて直す ----------------
+    // ---------------- まとめの 1 枚のボタン ----------------
 
-    /** 画面にしてほしいこと */
-    sealed interface FixStep {
-        /** スマホ全体の自動同期をオンにしてよいか聞く */
-        data object AskMaster : FixStep
-        /** このアカウントを Android 標準の画面で選んでもらう（アプリから見えるようにする） */
-        data class Choose(val account: String) : FixStep
-    }
+    /** スマホ全体の自動同期をオンにしてよいか聞いている */
+    private val _askMaster = MutableStateFlow(false)
+    val askMaster: StateFlow<Boolean> = _askMaster.asStateFlow()
 
-    private val _fixStep = MutableStateFlow<FixStep?>(null)
-    val fixStep: StateFlow<FixStep?> = _fixStep.asStateFlow()
-    private var chooseQueue = ArrayDeque<String>()
-
-    /** ［直す］ */
-    fun fixAll() {
-        viewModelScope.launch {
-            readSync()
-            val list = _sync.value.values.filter { it.account !in c.prefs.hiddenAccounts.value }
-            chooseQueue = ArrayDeque(list.filter { !it.access }.map { it.account })
-            if (list.any { !it.masterOn }) _fixStep.value = FixStep.AskMaster else nextFixStep()
+    /** まとめのボタン（オンにする／もう一度送る／今すぐ同期） */
+    fun summaryAction() {
+        when (summary.value?.kind) {
+            SyncSummary.Kind.MASTER_OFF -> _askMaster.value = true
+            SyncSummary.Kind.STUCK -> resend()
+            else -> syncNow()
         }
     }
 
     fun answerMaster(ok: Boolean) {
-        _fixStep.value = null
-        viewModelScope.launch {
-            if (ok) kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { c.sync.turnOnMasterSync() }
-            nextFixStep()
+        _askMaster.value = false
+        if (!ok) return
+        run("自動同期をオンにして、同期を始めました") {
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { c.sync.turnOnMasterSync() }
         }
     }
 
-    /** アカウントを選んだ（またはやめた）後 */
-    fun chosen() { _fixStep.value = null; nextFixStep() }
-
-    private fun nextFixStep() {
-        val next = chooseQueue.removeFirstOrNull()
-        if (next != null) { _fixStep.value = FixStep.Choose(next); return }
-        // 見えるアカウントは、カレンダーの同期をオンにして、すぐ同期する
-        viewModelScope.launch {
-            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                val accounts = _sync.value.keys.filter { it !in c.prefs.hiddenAccounts.value }
-                accounts.filter { c.sync.hasAccess(it) }.forEach { c.sync.turnOnAccountSync(it) }
-                c.sync.requestAll(upload = true, manual = true)
-            }
-            readSync()
-            val left = _sync.value.values.filter { it.account !in c.prefs.hiddenAccounts.value && (it.isError || !it.access) }
-            _messages.tryEmit(if (left.isEmpty()) "同期の設定を直して、同期を始めました"
-                else "直せなかったアカウントがあります：${left.joinToString("、") { it.account }}（︙ →「困ったとき」から確認できます）")
+    /** 送れていない変更を、もう一度送る（念のため、アプリから見えるアカウントは自動同期もオンにする） */
+    private fun resend() = run("もう一度送っています。届くと「送信待ち」が消えます") {
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            c.sync.googleAccounts().filter { c.sync.hasAccess(it) }.forEach { runCatching { c.sync.turnOnAccountSync(it) } }
+            c.sync.requestAll(upload = true, manual = true)
         }
     }
 

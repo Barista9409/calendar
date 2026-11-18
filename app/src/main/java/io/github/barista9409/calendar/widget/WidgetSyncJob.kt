@@ -29,9 +29,9 @@ class WidgetSyncJob : JobService() {
             try {
                 val sync = app.container.sync
                 sync.requestAll(upload = true)
-                // 始まるのを待ち（最大 5 秒）、終わるのを待つ（最大 75 秒。同期の見守りは 60 秒で打ち切る）
+                // 始まるのを待ち（最大 5 秒）、終わるのを待つ（最大 30 秒。同期の見守りは 20 秒で打ち切る）
                 withTimeoutOrNull(5_000) { sync.run.first { it.running } }
-                withTimeoutOrNull(75_000) { sync.run.first { !it.running } }
+                withTimeoutOrNull(30_000) { sync.run.first { !it.running } }
             } finally {
                 WidgetSyncState.clear(app)
                 runCatching { WidgetUpdater.updateAll(app) }
@@ -69,7 +69,7 @@ class WidgetSyncJob : JobService() {
 /** ウィジェットの「同期中」の印（見出しをタップした時刻）。描くたびにこれを見て、くるくると「同期しています…」を出す */
 object WidgetSyncState {
     /** これより古い印は無視する（ジョブが止められても出たままにならないように） */
-    const val MAX_MS = 90_000L
+    const val MAX_MS = 45_000L
 
     fun isActive(startedAt: Long, now: Long = System.currentTimeMillis()) = startedAt > 0 && now - startedAt in 0 until MAX_MS
 

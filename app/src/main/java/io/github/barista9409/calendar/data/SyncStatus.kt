@@ -62,7 +62,7 @@ data class SyncFacts(
 
 /** 「最後の同期：今日 18:47」 */
 fun lastSyncLine(lastSyncAt: Long, today: LocalDate = LocalDate.now(), zone: ZoneId = ZoneId.systemDefault()): String {
-    if (lastSyncAt <= 0) return "最後の同期：まだ確認していません"
+    if (lastSyncAt <= 0) return "最後の同期：まだ記録がありません"
     val t = Instant.ofEpochMilli(lastSyncAt).atZone(zone)
     val d = t.toLocalDate()
     val hm = t.format(DateTimeFormatter.ofPattern("H:mm"))
@@ -75,7 +75,7 @@ fun lastSyncLine(lastSyncAt: Long, today: LocalDate = LocalDate.now(), zone: Zon
 }
 
 /** 同期画面の一番上に出す 1 枚 */
-data class SyncSummary(val kind: Kind, val title: String, val sub: String, val action: String) {
+data class SyncSummary(val kind: Kind, val title: String, val sub: String, val action: String, val last: String = "") {
     enum class Kind { OK, SYNCING, PENDING, STUCK, MASTER_OFF }
 
     /** 赤い警告にするか */
@@ -89,12 +89,12 @@ data class SyncSummary(val kind: Kind, val title: String, val sub: String, val a
             val last = lastSyncLine(f.lastSyncAt, today, zone)
             return when {
                 !f.masterOn -> SyncSummary(Kind.MASTER_OFF, "自動同期がオフです",
-                    "スマホ全体の自動同期がオフのため、Google カレンダーの変更が自動では届きません", "オンにする")
-                f.running -> SyncSummary(Kind.SYNCING, "同期しています…", last, "")
+                    "スマホ全体の自動同期がオフのため、Google カレンダーの変更が自動では届きません", "オンにする", last)
+                f.running -> SyncSummary(Kind.SYNCING, "同期しています…", "", "今すぐ同期", last)
                 f.stuck > 0 -> SyncSummary(Kind.STUCK, "送れていない変更があります",
-                    "${f.stuck} 件が 15 分以上 Google に届いていません", "もう一度送る")
-                f.pending > 0 -> SyncSummary(Kind.PENDING, "送信待ち ${f.pending} 件", "まもなく Google に届きます。$last", "今すぐ同期")
-                else -> SyncSummary(Kind.OK, "同期できています", last, "今すぐ同期")
+                    "${f.stuck} 件が 15 分以上 Google に届いていません", "もう一度送る", last)
+                f.pending > 0 -> SyncSummary(Kind.PENDING, "送信待ち ${f.pending} 件", "まもなく Google に届きます", "今すぐ同期", last)
+                else -> SyncSummary(Kind.OK, "同期できています", "", "今すぐ同期", last)
             }
         }
     }

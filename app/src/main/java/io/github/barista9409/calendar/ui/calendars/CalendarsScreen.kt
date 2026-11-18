@@ -192,26 +192,32 @@ private fun SummaryCard(s: SyncSummary, busy: Boolean, onAction: () -> Unit) {
     val bad = s.isError
     val bg = if (bad) scheme.errorContainer else scheme.surfaceVariant
     val fg = if (bad) scheme.onErrorContainer else scheme.onSurface
-    Row(
+    Column(
         Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).clip(RoundedCornerShape(16.dp))
             .background(bg).padding(14.dp),
-        verticalAlignment = Alignment.CenterVertically,
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Box(Modifier.size(28.dp), contentAlignment = Alignment.Center) {
-            when (s.kind) {
-                SyncSummary.Kind.SYNCING -> androidx.compose.material3.CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.5.dp)
-                SyncSummary.Kind.OK -> Icon(Icons.Outlined.CheckCircle, null, tint = scheme.primary)
-                SyncSummary.Kind.PENDING -> Icon(Icons.Outlined.CloudUpload, null, tint = scheme.primary)
-                else -> Icon(Icons.Outlined.SyncProblem, null, tint = fg)
+        // 1 行目：いまの状態
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(28.dp), contentAlignment = Alignment.Center) {
+                when (s.kind) {
+                    SyncSummary.Kind.SYNCING -> androidx.compose.material3.CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.5.dp)
+                    SyncSummary.Kind.OK -> Icon(Icons.Outlined.CheckCircle, null, tint = scheme.primary)
+                    SyncSummary.Kind.PENDING -> Icon(Icons.Outlined.CloudUpload, null, tint = scheme.primary)
+                    else -> Icon(Icons.Outlined.SyncProblem, null, tint = fg)
+                }
+            }
+            Column(Modifier.weight(1f).padding(start = 12.dp)) {
+                Text(s.title, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = fg)
+                if (s.sub.isNotBlank()) Text(s.sub, fontSize = 12.sp, color = fg.copy(alpha = 0.8f))
             }
         }
-        Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
-            Text(s.title, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = fg)
-            if (s.sub.isNotBlank()) Text(s.sub, fontSize = 12.sp, color = fg.copy(alpha = 0.8f))
-        }
-        if (s.action.isNotBlank()) {
-            if (bad) androidx.compose.material3.Button(onClick = onAction, enabled = !busy) { Text(s.action) }
-            else OutlinedButton(onClick = onAction, enabled = !busy) { Text(s.action) }
+        // 2 行目：ボタンと、その右に最後の同期の日時
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            val enabled = !busy && s.kind != SyncSummary.Kind.SYNCING
+            if (bad) androidx.compose.material3.Button(onClick = onAction, enabled = enabled) { Text(s.action) }
+            else OutlinedButton(onClick = onAction, enabled = enabled) { Text(s.action) }
+            Text(s.last, fontSize = 13.sp, color = fg.copy(alpha = 0.85f), modifier = Modifier.padding(start = 12.dp).weight(1f))
         }
     }
 }

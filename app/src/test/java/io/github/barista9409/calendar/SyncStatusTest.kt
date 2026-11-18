@@ -36,8 +36,19 @@ class SyncStatusTest {
         assertEquals("最後の同期：今日 14:03", lastSyncLine(t, today, zone))
         assertEquals("最後の同期：昨日 14:03", lastSyncLine(t, today.plusDays(1), zone))
         assertEquals("最後の同期：11/17 14:03", lastSyncLine(t, today.plusDays(3), zone))
-        assertEquals("最後の同期：まだ確認していません", lastSyncLine(0L, today, zone))
-        assertTrue(SyncSummary.of(f(last = t), today, zone).sub.contains("今日 14:03"))
+        assertEquals("最後の同期：まだ記録がありません", lastSyncLine(0L, today, zone))
+        assertEquals("最後の同期：今日 14:03", SyncSummary.of(f(last = t), today, zone).last)
+        // 状態が何でも、ボタンの右に最後の同期を出す
+        assertEquals("最後の同期：今日 14:03", SyncSummary.of(f(last = t, pending = 1), today, zone).last)
+        assertEquals("最後の同期：今日 14:03", SyncSummary.of(f(last = t, running = true), today, zone).last)
+    }
+
+    @Test fun externalChangeCountsAsSync() {
+        // このアプリが書き換えた直後の変化は数えない。それ以外（Google から届いた変更）は「同期した」と数える
+        val P = io.github.barista9409.calendar.data.SyncProgress
+        assertFalse(P.isExternalChange(changedAt = 10_000, lastLocalWrite = 8_000))
+        assertTrue(P.isExternalChange(changedAt = 100_000, lastLocalWrite = 8_000))
+        assertTrue(P.isExternalChange(changedAt = 100_000, lastLocalWrite = 0))
     }
 
     @Test fun detailsAreForReferenceOnly() {

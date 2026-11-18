@@ -105,6 +105,8 @@ class SyncCenter(private val context: Context) {
 
     /** このアプリで予定を変えた直後に呼ぶ。変えた予定を「送信待ち」として覚え、少し待ってまとめて送信を頼む */
     fun localChanged(vararg eventIds: Long) {
+        // このアプリが書き換えた時刻（直後のカレンダーの変化は「Google から届いた」と数えない）
+        sp.edit().putLong("last_local_write", System.currentTimeMillis()).apply()
         if (eventIds.isNotEmpty()) synchronized(this) {
             val now = System.currentTimeMillis()
             val m = readEdits().toMutableMap()
@@ -176,6 +178,15 @@ class SyncCenter(private val context: Context) {
         sp.edit().putString("remote_fp", fp).apply()
         if (old != null) markSynced()
         return old != null
+    }
+
+    /**
+     * カレンダーが書き換わった（changedAt）。このアプリが直前に書き換えたのでなければ、
+     * Google の同期機能（端末によっては Google カレンダーアプリ自身）が届けた変更なので「同期した」と記録する。
+     */
+    fun noteProviderChange(changedAt: Long = System.currentTimeMillis()) {
+        val mine = sp.getLong("last_local_write", 0L)
+        if (SyncProgress.isExternalChange(changedAt, mine)) markSynced()
     }
 
     /** 同期できたのを確認した時刻を記録 */
@@ -278,7 +289,8 @@ class SyncCenter(private val context: Context) {
         runCatching { ContentResolver.addStatusChangeListener(mask) { h.post { tick() } } }
     }
 
-    private val checkLater = Runnable { checkRemoteSync(); pendingEdits() }
+    // 書き込みが落ち着いてから判定する（このアプリの書き込みは、その後に「自分で書いた」と記録されるので、少し待つ）
+    private val checkLater = Runnable { checkRemoteSync(); pendingEdits(); noteProviderChange(lastChangeAt) }
 
     private fun begin(manual: Boolean) {
         h.post {
@@ -325,7 +337,11 @@ class SyncCenter(private val context: Context) {
 
 /** 同期が終わったかの判定（テストしやすいように分けている） */
 object SyncProgress {
-    const val TIMEOUT_MS = 60_000L
+    /** これだけ待っても同期の動きが見えなければ、見守りを終える（端末によっては頼んでも動きが見えない） */
+    const val TIMEOUT_MS = 20_000L
+
+    /** このアプリが書き換えてから 15 秒以上あとのカレンダーの変化は、外（Google）から届いたもの */
+    fun isExternalChange(changedAt: Long, lastLocalWrite: Long): Boolean = changedAt - lastLocalWrite > 15_000
 
     /**
      * - 同期が動いているのを見て、それが止まった

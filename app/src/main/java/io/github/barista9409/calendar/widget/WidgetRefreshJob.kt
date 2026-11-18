@@ -23,7 +23,12 @@ class WidgetRefreshJob : JobService() {
         CoroutineScope(SupervisorJob() + Dispatchers.Default).launch {
             try {
                 // アプリが閉じていても、同期で届いたのを記録する（「最後の同期」の時刻）
-                runCatching { (app as io.github.barista9409.calendar.CalendarApp).container.sync.checkRemoteSync() }
+                runCatching {
+                    val sync = (app as io.github.barista9409.calendar.CalendarApp).container.sync
+                    sync.checkRemoteSync()
+                    // このアプリが書き換えたのでなければ、Google から届いた変更なので「同期した」と記録
+                    sync.noteProviderChange()
+                }
                 runCatching { WidgetUpdater.updateAll(app) }
             } finally {
                 schedule(app)

@@ -76,7 +76,7 @@ class ScreenStartupTest {
         assertEquals(android.view.View.GONE, spinner(v2))
         assertTrue(title(v2).startsWith("本日："))
 
-        // ジョブが止められて印が残っても、90 秒を過ぎたら出さない
+        // ジョブが止められて印が残っても、45 秒を過ぎたら出さない
         W.store(app).edit().putLong("refresh_$id", System.currentTimeMillis() - 100_000).commit()
         assertEquals(android.view.View.GONE, spinner(draw()))
     }
@@ -85,8 +85,8 @@ class ScreenStartupTest {
         val S = io.github.barista9409.calendar.widget.WidgetSyncState
         val now = 1_000_000L
         assertTrue(S.isActive(now - 1_000, now))
-        assertTrue(S.isActive(now - 80_000, now))
-        org.junit.Assert.assertFalse(S.isActive(now - 91_000, now))
+        assertTrue(S.isActive(now - 40_000, now))
+        org.junit.Assert.assertFalse(S.isActive(now - 46_000, now))
         org.junit.Assert.assertFalse(S.isActive(0L, now))
     }
 }

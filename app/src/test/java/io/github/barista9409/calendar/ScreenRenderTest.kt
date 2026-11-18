@@ -2,6 +2,7 @@ package io.github.barista9409.calendar
 
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
 import io.github.barista9409.calendar.ui.CalendarScreen
@@ -31,6 +32,8 @@ class ScreenRenderTest {
         rule.setContent { CalendarTheme { MenuTheme { CalendarsScreen(onBack = {}) } } }
         rule.waitForIdle()
         rule.onNodeWithText("カレンダーと同期").assertExists()
+        // まとめの 1 枚：ボタンの右に最後の同期の日時（テスト環境ではスマホ全体の自動同期がオフ扱いなので［オンにする］）
+        rule.waitUntil(5_000) { rule.onAllNodesWithText("最後の同期", substring = true).fetchSemanticsNodes().isNotEmpty() }
     }
 
     @Test fun settingsScreenOpens() {

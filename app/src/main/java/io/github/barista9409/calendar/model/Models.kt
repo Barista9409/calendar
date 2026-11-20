@@ -108,3 +108,10 @@ data class EventColor(val key: String, val color: Int)
 /** 入力画面で選んだ添付ファイル（保存したあとにアップロードする） */
 data class PendingFile(val uri: String, val name: String)
 
+
+/**
+ * 予定の入力画面で選べるカレンダー：書き込めて、メニューで非表示にしていないもの。
+ * いまの予定が入っているカレンダーは、非表示でも選択肢に残す（名前が出ずに迷わないように）。
+ */
+fun pickableCalendars(writable: List<CalendarInfo>, hidden: Set<Long>, currentId: Long?): List<CalendarInfo> =
+    writable.filter { it.id !in hidden || it.id == currentId }

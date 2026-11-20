@@ -381,7 +381,9 @@ fun CalendarScreen(vm: CalendarViewModel, onOpenUpdate: () -> Unit, onOpenSync: 
     // 予定の作成・編集は全画面
     (sheet as? Sheet.Edit)?.let { s ->
         io.github.barista9409.calendar.ui.edit.EventEditScreen(
-            draft = s.draft, calendars = writable, loadColors = vm::eventColors,
+            // 選べるカレンダーは、メニューで表示しているものだけ（いま入っているカレンダーは非表示でも残す）
+            draft = s.draft, calendars = io.github.barista9409.calendar.model.pickableCalendars(writable, hidden, s.draft.calendarId),
+            loadColors = vm::eventColors,
             onChange = vm::updateDraft, onSave = { vm.save(s.draft) }, onClose = vm::closeSheet,
         )
     }
